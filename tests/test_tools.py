@@ -1,10 +1,19 @@
 """Tests for MCP tool definitions and handler routing."""
 
+import asyncio
 import json
 
 import pytest
+from mcp.types import CallToolResult
 
-from rs_spectrum_analyzer_mcp.tools import _TOOL_HANDLERS, get_tools, handle_tool
+from rs_spectrum_analyzer_mcp.tools import (
+    _TOOL_HANDLERS,
+    _connection_lock,
+    _measurement_lock,
+    _template_lock,
+    get_tools,
+    handle_tool,
+)
 
 
 class TestToolDefinitions:
@@ -162,17 +171,22 @@ class TestHandleToolRouting:
     """Test that handle_tool routes to correct handlers."""
 
     @pytest.mark.asyncio
-    async def test_unknown_tool(self):
+    async def test_unknown_tool_returns_call_tool_result(self):
+        """Issue 6: handle_tool returns CallToolResult with isError=True for unknown tools."""
         result = await handle_tool("sa_nonexistent", {})
-        assert len(result) == 1
-        assert "Error" in result[0].text
+        assert isinstance(result, CallToolResult)
+        assert result.isError is True
+        assert len(result.content) == 1
+        assert "Error" in result.content[0].text
 
     @pytest.mark.asyncio
     async def test_list_templates_no_connection_needed(self):
         """sa_list_templates doesn't need a connection."""
         result = await handle_tool("sa_list_templates", {})
-        assert len(result) == 1
-        data = json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+        assert len(result.content) == 1
+        data = json.loads(result.content[0].text)
         assert "channel_power" in data
         assert "aclr" in data
         assert "emi" in data
@@ -180,15 +194,17 @@ class TestHandleToolRouting:
     @pytest.mark.asyncio
     async def test_clear_limits_no_connection_needed(self):
         result = await handle_tool("sa_clear_limits", {})
-        assert len(result) == 1
-        data = json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+        data = json.loads(result.content[0].text)
         assert data["limits_cleared"] is True
 
     @pytest.mark.asyncio
     async def test_list_limits_no_connection_needed(self):
         result = await handle_tool("sa_list_limits", {})
-        assert len(result) == 1
-        data = json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+        data = json.loads(result.content[0].text)
         assert "limits" in data
 
     @pytest.mark.asyncio
@@ -199,7 +215,9 @@ class TestHandleToolRouting:
                 {"start_freq_hz": 1e9, "stop_freq_hz": 2e9, "max_db": -30.0},
             ],
         })
-        data = json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+        data = json.loads(result.content[0].text)
         assert data["limit_defined"] == "test_limit"
 
     @pytest.mark.asyncio
@@ -207,12 +225,98 @@ class TestHandleToolRouting:
         result = await handle_tool("sa_load_template", {
             "template_name": "cispr_32_class_b",
         })
-        data = json.loads(result[0].text)
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+        data = json.loads(result.content[0].text)
         assert data["name"] == "CISPR 32 Class B Conducted"
 
     @pytest.mark.asyncio
     async def test_load_template_unknown(self):
+        """Issue 6: Unknown template returns isError=True."""
         result = await handle_tool("sa_load_template", {
             "template_name": "nonexistent",
         })
-        assert "Error" in result[0].text
+        assert isinstance(result, CallToolResult)
+        assert result.isError is True
+        assert "Error" in result.content[0].text
+
+
+class TestIsErrorFlag:
+    """Issue 6: Verify isError=True is set on all error paths."""
+
+    @pytest.mark.asyncio
+    async def test_error_on_unknown_tool(self):
+        result = await handle_tool("sa_nonexistent_tool", {})
+        assert isinstance(result, CallToolResult)
+        assert result.isError is True
+        assert "Unknown tool" in result.content[0].text
+
+    @pytest.mark.asyncio
+    async def test_error_on_missing_template_arg(self):
+        result = await handle_tool("sa_load_template", {})
+        assert isinstance(result, CallToolResult)
+        assert result.isError is True
+
+    @pytest.mark.asyncio
+    async def test_success_has_is_error_false(self):
+        result = await handle_tool("sa_list_templates", {})
+        assert isinstance(result, CallToolResult)
+        assert result.isError is False
+
+    @pytest.mark.asyncio
+    async def test_error_on_apply_template_no_loaded(self):
+        """Applying template when none loaded returns isError=True."""
+        # Reset template state first
+        import rs_spectrum_analyzer_mcp.tools as tools_mod
+        old_template = tools_mod._current_template
+        tools_mod._current_template = None
+        try:
+            result = await handle_tool("sa_apply_template", {})
+            assert isinstance(result, CallToolResult)
+            assert result.isError is True
+            assert "No template loaded" in result.content[0].text
+        finally:
+            tools_mod._current_template = old_template
+
+
+class TestAsyncioLocks:
+    """Issue 4: Verify asyncio.Lock instances exist and are proper Lock objects."""
+
+    def test_connection_lock_exists(self):
+        assert isinstance(_connection_lock, asyncio.Lock)
+
+    def test_template_lock_exists(self):
+        assert isinstance(_template_lock, asyncio.Lock)
+
+    def test_measurement_lock_exists(self):
+        assert isinstance(_measurement_lock, asyncio.Lock)
+
+    @pytest.mark.asyncio
+    async def test_locks_are_reentrant_safe(self):
+        """Locks should not be held when we check, meaning they can be acquired."""
+        assert not _connection_lock.locked()
+        assert not _template_lock.locked()
+        assert not _measurement_lock.locked()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_list_templates(self):
+        """Multiple concurrent list_templates calls should not deadlock."""
+        results = await asyncio.gather(
+            handle_tool("sa_list_templates", {}),
+            handle_tool("sa_list_templates", {}),
+            handle_tool("sa_list_templates", {}),
+        )
+        for result in results:
+            assert isinstance(result, CallToolResult)
+            assert result.isError is False
+
+    @pytest.mark.asyncio
+    async def test_concurrent_limit_operations(self):
+        """Multiple concurrent limit operations should not deadlock."""
+        results = await asyncio.gather(
+            handle_tool("sa_clear_limits", {}),
+            handle_tool("sa_list_limits", {}),
+        )
+        for result in results:
+            assert isinstance(result, CallToolResult)
+            assert result.isError is False

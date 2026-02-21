@@ -99,8 +99,8 @@ class SCPISocket:
             try:
                 self._writer.close()
                 await self._writer.wait_closed()
-            except Exception as e:
-                logger.warning(f"Error closing connection: {e}")
+            except OSError as e:
+                logger.warning("Error closing connection to %s: %s", self.address, e)
             finally:
                 self._writer = None
                 self._reader = None
@@ -131,8 +131,9 @@ class SCPISocket:
                 await self._writer.drain()
                 logger.debug(f"Sent: {command.strip()}")
 
-            except Exception as e:
+            except OSError as e:
                 self._connected = False
+                logger.error("Send failed to %s: %s", self.address, e)
                 raise CommunicationError(f"Failed to send command: {e}", self.address)
 
     async def read_response(self, timeout: float | None = None) -> str:
@@ -165,8 +166,9 @@ class SCPISocket:
 
         except asyncio.TimeoutError:
             raise TimeoutError(f"Read timed out after {timeout}s", self.address)
-        except Exception as e:
+        except OSError as e:
             self._connected = False
+            logger.error("Read failed from %s: %s", self.address, e)
             raise CommunicationError(f"Failed to read response: {e}", self.address)
 
     async def query(self, command: str, timeout: float | None = None) -> str:
@@ -197,8 +199,9 @@ class SCPISocket:
                 self._writer.write(command.encode())
                 await self._writer.drain()
                 logger.debug(f"Sent: {command.strip()}")
-            except Exception as e:
+            except OSError as e:
                 self._connected = False
+                logger.error("Query send failed to %s: %s", self.address, e)
                 raise CommunicationError(f"Failed to send command: {e}", self.address)
 
             try:
@@ -211,8 +214,9 @@ class SCPISocket:
                 return response
             except asyncio.TimeoutError:
                 raise TimeoutError(f"Read timed out after {timeout}s", self.address)
-            except Exception as e:
+            except OSError as e:
                 self._connected = False
+                logger.error("Query read failed from %s: %s", self.address, e)
                 raise CommunicationError(f"Failed to read response: {e}", self.address)
 
     async def query_binary(
@@ -279,7 +283,8 @@ class SCPISocket:
 
             except asyncio.TimeoutError:
                 raise TimeoutError(f"Binary read timed out after {timeout}s", self.address)
-            except Exception as e:
+            except (OSError, ValueError) as e:
+                logger.error("Binary read failed from %s: %s", self.address, e)
                 raise CommunicationError(f"Failed to read binary data: {e}", self.address)
 
     async def query_float_list(

@@ -239,22 +239,38 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_send_blocked_when_disabled(self, mock_settings_deny):
         """sa_scpi_send should return error when allow_raw_scpi=False."""
+        from mcp.types import CallToolResult
+
         from rs_spectrum_analyzer_mcp.tools import _handle_scpi_send
 
         with patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_deny):
             result = await _handle_scpi_send({"command": "*RST"})
-            assert len(result) == 1
-            assert "disabled" in result[0].text.lower() or "disabled" in result[0].text
+            # _handle_scpi_send returns CallToolResult with isError=True when blocked
+            if isinstance(result, CallToolResult):
+                assert result.isError is True
+                assert len(result.content) == 1
+                assert "disabled" in result.content[0].text.lower()
+            else:
+                assert len(result) == 1
+                assert "disabled" in result[0].text.lower()
 
     @pytest.mark.asyncio
     async def test_scpi_query_blocked_when_disabled(self, mock_settings_deny):
         """sa_scpi_query should return error when allow_raw_scpi=False."""
+        from mcp.types import CallToolResult
+
         from rs_spectrum_analyzer_mcp.tools import _handle_scpi_query
 
         with patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_deny):
             result = await _handle_scpi_query({"command": "*IDN?"})
-            assert len(result) == 1
-            assert "disabled" in result[0].text.lower() or "disabled" in result[0].text
+            # _handle_scpi_query returns CallToolResult with isError=True when blocked
+            if isinstance(result, CallToolResult):
+                assert result.isError is True
+                assert len(result.content) == 1
+                assert "disabled" in result.content[0].text.lower()
+            else:
+                assert len(result) == 1
+                assert "disabled" in result[0].text.lower()
 
     @pytest.mark.asyncio
     async def test_scpi_send_allowed_when_enabled(self, mock_settings_allow, mock_scpi_socket):
