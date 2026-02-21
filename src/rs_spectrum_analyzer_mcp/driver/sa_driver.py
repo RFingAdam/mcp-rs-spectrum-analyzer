@@ -6,6 +6,7 @@ from enum import Enum
 from ..exceptions import (
     ConfigurationError,
     MeasurementError,
+    SpectrumAnalyzerError,
 )
 from ..models.sa_types import (
     ACLRResult,
@@ -149,9 +150,10 @@ class RSSpectrumAnalyzerDriver:
 
             return self._info
 
-        except Exception as e:
+        except (OSError, SpectrumAnalyzerError) as e:
             self._state = ConnectionState.ERROR
             self._last_error = str(e)
+            logger.error("Connection failed to %s:%d: %s", self.host, self.port, e)
             raise
 
     async def disconnect(self) -> None:
@@ -708,8 +710,8 @@ class RSSpectrumAnalyzerDriver:
                             "measured_dbm": measured,
                             "margin_db": limit - measured,
                         })
-                except (ValueError, IndexError):
-                    pass
+                except (ValueError, IndexError) as e:
+                    logger.debug("Skipping unparseable SEM segment at index %d: %s", i, e)
 
         return SEMResult(
             passed=passed,
@@ -739,7 +741,8 @@ class RSSpectrumAnalyzerDriver:
                 status["rbw_hz"] = await self.get_rbw()
                 status["vbw_hz"] = await self.get_vbw()
                 status["attenuation_db"] = await self.get_attenuation()
-            except Exception as e:
+            except (SpectrumAnalyzerError, ValueError) as e:
+                logger.warning("Failed to query instrument status details: %s", e)
                 status["query_error"] = str(e)
 
         if self._last_error:

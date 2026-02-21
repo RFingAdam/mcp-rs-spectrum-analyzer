@@ -1,10 +1,15 @@
 """Instrument state management for spectrum analyzer configuration persistence."""
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from .exceptions import SpectrumAnalyzerError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -186,7 +191,10 @@ class InstrumentState:
             try:
                 timestamp = datetime.fromisoformat(data["timestamp"])
             except ValueError:
-                pass
+                logger.debug(
+                    "Could not parse timestamp '%s', using current time",
+                    data["timestamp"],
+                )
 
         return cls(
             frequency=frequency,
@@ -289,7 +297,8 @@ class StateManager:
         try:
             preamp = await sa.scpi_query("INP:GAIN:STAT?")
             preamp_on = preamp.strip() in ("1", "ON")
-        except Exception:
+        except (SpectrumAnalyzerError, ValueError) as e:
+            logger.debug("Could not query preamp state, assuming off: %s", e)
             preamp_on = False
 
         amplitude = AmplitudeState(
@@ -326,7 +335,8 @@ class StateManager:
                     frequency_hz=float(freq),
                     amplitude_dbm=float(amp),
                 ))
-            except Exception:
+            except (SpectrumAnalyzerError, ValueError) as e:
+                logger.debug("Marker %d not active or could not be read: %s", i, e)
                 markers.append(MarkerState(
                     marker_number=i,
                     enabled=False,
@@ -342,11 +352,68 @@ class StateManager:
 
     async def restore_state(self, sa, state: InstrumentState) -> None:
         """
-        Restore spectrum analyzer to saved state.
+        Restore spectrum analyzer to saved state with rollback on failure.
+
+        Captures the current instrument state before attempting restore.
+        If restore fails partway through, rolls back to the pre-restore state
+        so the instrument is not left in an inconsistent configuration.
 
         Args:
             sa: RSSpectrumAnalyzerDriver instance
             state: State to restore
+
+        Raises:
+            SpectrumAnalyzerError: If restore fails (rollback will be attempted)
+        """
+        # Issue 17: Capture pre-restore state snapshot for rollback
+        logger.info("Capturing pre-restore state snapshot for rollback safety")
+        try:
+            pre_restore_state = await self.capture_state(sa)
+        except (SpectrumAnalyzerError, ValueError) as e:
+            logger.error("Failed to capture pre-restore state: %s", e)
+            raise SpectrumAnalyzerError(
+                f"Cannot restore state: failed to capture current state for rollback: {e}"
+            )
+
+        try:
+            await self._apply_state(sa, state)
+            logger.info("State restored successfully")
+        except (SpectrumAnalyzerError, ValueError, OSError) as restore_err:
+            logger.error(
+                "State restore failed at: %s. Attempting rollback to pre-restore state.",
+                restore_err,
+            )
+            try:
+                await self._apply_state(sa, pre_restore_state)
+                logger.info("Rollback to pre-restore state succeeded")
+            except (SpectrumAnalyzerError, ValueError, OSError) as rollback_err:
+                logger.error(
+                    "Rollback also failed: %s. Instrument may be in inconsistent state.",
+                    rollback_err,
+                )
+                raise SpectrumAnalyzerError(
+                    f"State restore failed ({restore_err}) and rollback also failed "
+                    f"({rollback_err}). Instrument may be in inconsistent state. "
+                    f"Consider using *RST to reset the instrument."
+                )
+            raise SpectrumAnalyzerError(
+                f"State restore failed ({restore_err}), but rollback to "
+                f"pre-restore state succeeded."
+            )
+
+    async def _apply_state(self, sa, state: InstrumentState) -> None:
+        """
+        Apply instrument state settings via SCPI commands.
+
+        This is the internal method that does the actual SCPI writes.
+        Used by both restore_state (for the target state) and rollback.
+
+        Args:
+            sa: RSSpectrumAnalyzerDriver instance
+            state: State to apply
+
+        Raises:
+            SpectrumAnalyzerError: If any SCPI command fails
         """
         # Restore frequency
         await sa.scpi_send(f"SENS:FREQ:CENT {state.frequency.center_frequency_hz}")
@@ -397,7 +464,8 @@ class StateManager:
                     "path": str(filepath),
                     "summary": state.get_summary(),
                 })
-            except Exception as e:
+            except (json.JSONDecodeError, KeyError, ValueError, OSError) as e:
+                logger.warning("Failed to load state file %s: %s", filepath, e)
                 states.append({
                     "filename": filepath.name,
                     "path": str(filepath),

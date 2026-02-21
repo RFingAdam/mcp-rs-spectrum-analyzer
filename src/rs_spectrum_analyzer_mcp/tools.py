@@ -1,5 +1,6 @@
 """MCP tool definitions and handlers for spectrum analyzer operations."""
 
+import asyncio
 import csv
 import io
 import json
@@ -7,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 from .config import get_settings
 from .driver import RSSpectrumAnalyzerDriver
@@ -40,6 +41,11 @@ _limit_manager = LimitManager()
 # Global state manager
 _state_manager = StateManager()
 
+# Issue 4: asyncio.Lock instances for shared mutable state
+_connection_lock = asyncio.Lock()
+_template_lock = asyncio.Lock()
+_measurement_lock = asyncio.Lock()
+
 
 def _get_connection_key(host: str, port: int) -> str:
     """Generate unique key for connection."""
@@ -53,32 +59,34 @@ async def _get_sa(host: str | None = None, port: int | None = None) -> RSSpectru
     port = port if port is not None else settings.default_port
     key = _get_connection_key(host, port)
 
-    if key in _sa_connections:
-        sa = _sa_connections[key]
-        if sa.is_connected:
-            return sa
+    async with _connection_lock:
+        if key in _sa_connections:
+            sa = _sa_connections[key]
+            if sa.is_connected:
+                return sa
 
-    # Create new connection
-    sa = RSSpectrumAnalyzerDriver(
-        host=host,
-        port=port,
-        timeout=settings.connection_timeout,
-        command_timeout=settings.command_timeout,
-        safety_limits=settings.get_safety_limits(),
-    )
-    await sa.connect()
-    _sa_connections[key] = sa
-    return sa
+        # Create new connection
+        sa = RSSpectrumAnalyzerDriver(
+            host=host,
+            port=port,
+            timeout=settings.connection_timeout,
+            command_timeout=settings.command_timeout,
+            safety_limits=settings.get_safety_limits(),
+        )
+        await sa.connect()
+        _sa_connections[key] = sa
+        return sa
 
 
 async def _close_sa(host: str, port: int) -> bool:
     """Close spectrum analyzer connection."""
     key = _get_connection_key(host, port)
-    if key in _sa_connections:
-        sa = _sa_connections.pop(key)
-        await sa.disconnect()
-        return True
-    return False
+    async with _connection_lock:
+        if key in _sa_connections:
+            sa = _sa_connections.pop(key)
+            await sa.disconnect()
+            return True
+        return False
 
 
 def _format_result(result: Any) -> list[TextContent]:
@@ -92,9 +100,12 @@ def _format_result(result: Any) -> list[TextContent]:
     return [TextContent(type="text", text=text)]
 
 
-def _format_error(error: Exception) -> list[TextContent]:
-    """Format error as MCP TextContent."""
-    return [TextContent(type="text", text=f"Error: {error}")]
+def _format_error(error: Exception) -> CallToolResult:
+    """Format error as MCP CallToolResult with isError=True."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=f"Error: {error}")],
+        isError=True,
+    )
 
 
 # =============================================================================
@@ -1075,17 +1086,32 @@ def get_tools() -> list[Tool]:
 # Tool Handlers
 # =============================================================================
 
-async def handle_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-    """Route tool call to appropriate handler."""
+async def handle_tool(name: str, arguments: dict[str, Any]) -> CallToolResult:
+    """Route tool call to appropriate handler.
+
+    Returns a CallToolResult. On success, isError=False; on failure, isError=True.
+    The MCP SDK recognises CallToolResult and passes it through directly.
+    """
     try:
         handler = _TOOL_HANDLERS.get(name)
         if handler is None:
             return _format_error(ValueError(f"Unknown tool: {name}"))
-        return await handler(arguments)
+        content = await handler(arguments)
+        # Handler returned successfully - wrap content in a CallToolResult
+        if isinstance(content, CallToolResult):
+            return content
+        return CallToolResult(content=content, isError=False)
     except SpectrumAnalyzerError as e:
+        logger.error("Spectrum analyzer error in tool %s: %s", name, e)
+        return _format_error(e)
+    except (ValueError, TypeError, KeyError) as e:
+        logger.error("Invalid argument in tool %s: %s", name, e)
+        return _format_error(e)
+    except OSError as e:
+        logger.error("I/O error in tool %s: %s", name, e)
         return _format_error(e)
     except Exception as e:
-        logger.exception(f"Unexpected error in tool {name}")
+        logger.exception("Unexpected error in tool %s", name)
         return _format_error(e)
 
 
@@ -1110,8 +1136,8 @@ async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
                 "instrument": info.to_dict(),
             })
             await sa.disconnect()
-        except Exception:
-            pass
+        except (OSError, SpectrumAnalyzerError) as e:
+            logger.debug("No instrument at %s:%d: %s", host, port, e)
 
     if found:
         return _format_result({"found": found, "count": len(found)})
@@ -1351,7 +1377,8 @@ async def _handle_measure_evm(args: dict[str, Any]) -> list[TextContent]:
             "modulation": modulation,
             "evm_percent": float(evm_resp.strip()),
         })
-    except Exception as e:
+    except (SpectrumAnalyzerError, ValueError) as e:
+        logger.warning("EVM measurement failed (may require digital demod option): %s", e)
         return _format_result({
             "modulation": modulation,
             "error": f"EVM measurement requires digital demod option: {e}",
@@ -1376,7 +1403,8 @@ async def _handle_measure_ccdf(args: dict[str, Any]) -> list[TextContent]:
         if len(parts) >= 3:
             result["peak_power_dbm"] = float(parts[2])
         return _format_result(result)
-    except Exception as e:
+    except (SpectrumAnalyzerError, ValueError) as e:
+        logger.warning("CCDF measurement failed: %s", e)
         return _format_result({
             "error": f"CCDF measurement failed: {e}",
         })
@@ -1447,7 +1475,7 @@ async def _handle_export_trace_data(args: dict[str, Any]) -> list[TextContent]:
     return _format_result(trace.to_dict())
 
 
-async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
     settings = get_settings()
     command = args["command"]
 
@@ -1471,7 +1499,7 @@ async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
     return _format_result({"command": command, "sent": True})
 
 
-async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
     settings = get_settings()
     command = args["command"]
 
@@ -1537,55 +1565,57 @@ async def _handle_list_templates(args: dict[str, Any]) -> list[TextContent]:
     return _format_result(templates)
 
 
-async def _handle_load_template(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_load_template(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
     global _current_template
 
     filepath = args.get("filepath")
     template_name = args.get("template_name")
 
-    if filepath:
-        # Issue 2: Validate template filepath stays within cwd
-        safe_path = validate_safe_path(filepath, Path.cwd())
-        _current_template = MeasurementTemplate.load(safe_path)
-    elif template_name:
-        template_map = {
-            "lte_10mhz_channel_power": lambda: ChannelPowerTemplate.lte_10mhz(),
-            "nr_100mhz_channel_power": lambda: ChannelPowerTemplate.nr_100mhz(),
-            "wlan_80mhz_channel_power": lambda: ChannelPowerTemplate.wlan_80mhz(),
-            "lte_10mhz_aclr": lambda: ACLRTemplate.lte_10mhz(),
-            "nr_100mhz_aclr": lambda: ACLRTemplate.nr_100mhz(),
-            "wlan_80mhz_aclr": lambda: ACLRTemplate.wlan_80mhz(),
-            "cispr_32_class_b": lambda: EMIPrecomplianceTemplate.cispr_32_class_b(),
-            "cispr_32_class_b_radiated": (
-                lambda: EMIPrecomplianceTemplate.cispr_32_class_b_radiated()
-            ),
-            "wideband_spurious": lambda: SpuriousEmissionTemplate.wideband_spurious(),
-            "harmonic_spurious": lambda: SpuriousEmissionTemplate.harmonic_spurious(),
-            "lte_10mhz_obw": lambda: OccupiedBandwidthTemplate.lte_10mhz(),
-            "harmonic_measurement": lambda: HarmonicTemplate.create(1e9),
-        }
+    async with _template_lock:
+        if filepath:
+            # Issue 2: Validate template filepath stays within cwd
+            safe_path = validate_safe_path(filepath, Path.cwd())
+            _current_template = MeasurementTemplate.load(safe_path)
+        elif template_name:
+            template_map = {
+                "lte_10mhz_channel_power": lambda: ChannelPowerTemplate.lte_10mhz(),
+                "nr_100mhz_channel_power": lambda: ChannelPowerTemplate.nr_100mhz(),
+                "wlan_80mhz_channel_power": lambda: ChannelPowerTemplate.wlan_80mhz(),
+                "lte_10mhz_aclr": lambda: ACLRTemplate.lte_10mhz(),
+                "nr_100mhz_aclr": lambda: ACLRTemplate.nr_100mhz(),
+                "wlan_80mhz_aclr": lambda: ACLRTemplate.wlan_80mhz(),
+                "cispr_32_class_b": lambda: EMIPrecomplianceTemplate.cispr_32_class_b(),
+                "cispr_32_class_b_radiated": (
+                    lambda: EMIPrecomplianceTemplate.cispr_32_class_b_radiated()
+                ),
+                "wideband_spurious": lambda: SpuriousEmissionTemplate.wideband_spurious(),
+                "harmonic_spurious": lambda: SpuriousEmissionTemplate.harmonic_spurious(),
+                "lte_10mhz_obw": lambda: OccupiedBandwidthTemplate.lte_10mhz(),
+                "harmonic_measurement": lambda: HarmonicTemplate.create(1e9),
+            }
 
-        factory = template_map.get(template_name)
-        if factory is None:
-            return _format_error(ValueError(f"Unknown template: {template_name}"))
-        _current_template = factory()
-    else:
-        return _format_error(ValueError("Specify either template_name or filepath"))
+            factory = template_map.get(template_name)
+            if factory is None:
+                return _format_error(ValueError(f"Unknown template: {template_name}"))
+            _current_template = factory()
+        else:
+            return _format_error(ValueError("Specify either template_name or filepath"))
 
-    return _format_result(_current_template.get_summary())
+        return _format_result(_current_template.get_summary())
 
 
-async def _handle_apply_template(args: dict[str, Any]) -> list[TextContent]:
+async def _handle_apply_template(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
     global _current_template
-    if _current_template is None:
-        return _format_error(ValueError("No template loaded. Use sa_load_template first."))
+    async with _template_lock:
+        if _current_template is None:
+            return _format_error(ValueError("No template loaded. Use sa_load_template first."))
 
-    sa = await _get_sa(args.get("host"), args.get("port"))
-    await _current_template.apply(sa)
-    return _format_result({
-        "template_applied": _current_template.name,
-        "config": _current_template.config.to_dict(),
-    })
+        sa = await _get_sa(args.get("host"), args.get("port"))
+        await _current_template.apply(sa)
+        return _format_result({
+            "template_applied": _current_template.name,
+            "config": _current_template.config.to_dict(),
+        })
 
 
 async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
@@ -1604,7 +1634,8 @@ async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
         segments=segments,
         description=args.get("description", ""),
     )
-    _limit_manager.add_limit(limit)
+    async with _measurement_lock:
+        _limit_manager.add_limit(limit)
 
     return _format_result({
         "limit_defined": args["name"],
@@ -1615,27 +1646,30 @@ async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_check_limits(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
-    result = _limit_manager.get_overall_status(trace)
+    async with _measurement_lock:
+        result = _limit_manager.get_overall_status(trace)
     return _format_result(result)
 
 
 async def _handle_clear_limits(args: dict[str, Any]) -> list[TextContent]:
-    _limit_manager.clear_limits()
+    async with _measurement_lock:
+        _limit_manager.clear_limits()
     return _format_result({"limits_cleared": True})
 
 
 async def _handle_list_limits(args: dict[str, Any]) -> list[TextContent]:
-    names = _limit_manager.list_limits()
-    limits_info = []
-    for name in names:
-        limit = _limit_manager.get_limit(name)
-        if limit:
-            limits_info.append({
-                "name": name,
-                "description": limit.description,
-                "num_segments": len(limit.segments),
-                "segments": [s.to_dict() for s in limit.segments],
-            })
+    async with _measurement_lock:
+        names = _limit_manager.list_limits()
+        limits_info = []
+        for name in names:
+            limit = _limit_manager.get_limit(name)
+            if limit:
+                limits_info.append({
+                    "name": name,
+                    "description": limit.description,
+                    "num_segments": len(limit.segments),
+                    "segments": [s.to_dict() for s in limit.segments],
+                })
     return _format_result({"limits": limits_info, "count": len(limits_info)})
 
 
