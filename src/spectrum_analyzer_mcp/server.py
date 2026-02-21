@@ -1,4 +1,4 @@
-"""MCP server for Rohde & Schwarz spectrum analyzer automation."""
+"""MCP server for spectrum analyzer automation."""
 
 import asyncio
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def create_server() -> Server:
     """Create and configure MCP server."""
-    server = Server("rs-spectrum-analyzer-mcp")
+    server = Server("spectrum-analyzer-mcp")
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:
@@ -37,7 +37,7 @@ async def run_server() -> None:
     settings = get_settings()
     settings.configure_logging()
 
-    logger.info("Starting R&S Spectrum Analyzer MCP Server")
+    logger.info("Starting Spectrum Analyzer MCP Server")
     logger.info(f"Default connection: {settings.default_host}:{settings.default_port}")
 
     server = create_server()

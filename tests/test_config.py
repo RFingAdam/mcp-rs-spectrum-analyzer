@@ -1,9 +1,7 @@
 """Tests for configuration management."""
 
-
-
-from rs_spectrum_analyzer_mcp.config import SASettings, get_settings, reload_settings
-from rs_spectrum_analyzer_mcp.safety.validators import SafetyLimits
+from spectrum_analyzer_mcp.config import SASettings, get_settings, reload_settings
+from spectrum_analyzer_mcp.safety.validators import SafetyLimits
 
 
 class TestSASettings:

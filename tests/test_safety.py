@@ -2,8 +2,8 @@
 
 import pytest
 
-from rs_spectrum_analyzer_mcp.exceptions import SafetyError
-from rs_spectrum_analyzer_mcp.safety.validators import SafetyLimits, SafetyValidator
+from spectrum_analyzer_mcp.exceptions import SafetyError
+from spectrum_analyzer_mcp.safety.validators import SafetyLimits, SafetyValidator
 
 
 class TestSafetyLimits:

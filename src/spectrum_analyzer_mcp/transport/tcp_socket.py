@@ -1,27 +1,24 @@
-"""Async TCP/IP SCPI transport for Rohde & Schwarz spectrum analyzers."""
+"""Async TCP/IP socket transport for SCPI instruments."""
 
 import asyncio
 import logging
 
-from .exceptions import CommunicationError, ConnectionError, TimeoutError
+from ..exceptions import CommunicationError, ConnectionError, TimeoutError
+from .base import SCPITransport
 
 logger = logging.getLogger(__name__)
 
 
-class SCPISocket:
-    """
-    Async TCP/IP socket transport for SCPI commands.
+class TCPSocketTransport(SCPITransport):
+    """TCP/IP socket transport for SCPI commands.
 
-    This class handles low-level communication with R&S spectrum
-    analyzers via TCP/IP socket on port 5025.
+    Direct async TCP socket connection, typically on port 5025 (R&S, Siglent)
+    or 5555 (Rigol). No external dependencies required.
 
-    Example:
-        async with SCPISocket("192.168.1.100", 5025) as scpi:
+    Example::
+
+        async with TCPSocketTransport("192.168.1.100", 5025) as scpi:
             idn = await scpi.query("*IDN?")
-            print(f"Connected to: {idn}")
-
-            await scpi.send("SENS:FREQ:CENT 1e9")
-            await scpi.send("SENS:FREQ:SPAN 100e6")
     """
 
     DEFAULT_PORT = 5025
@@ -35,15 +32,6 @@ class SCPISocket:
         timeout: float = 5.0,
         command_timeout: float = 30.0,
     ):
-        """
-        Initialize SCPI socket connection.
-
-        Args:
-            host: Instrument hostname or IP address
-            port: TCP port (default 5025)
-            timeout: Connection timeout in seconds
-            command_timeout: Default timeout for commands in seconds
-        """
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -56,21 +44,13 @@ class SCPISocket:
 
     @property
     def is_connected(self) -> bool:
-        """Check if socket is connected."""
         return self._connected and self._writer is not None
 
     @property
     def address(self) -> str:
-        """Return address string for error messages."""
         return f"{self.host}:{self.port}"
 
     async def connect(self) -> None:
-        """
-        Establish TCP connection to instrument.
-
-        Raises:
-            ConnectionError: If connection fails
-        """
         if self._connected:
             return
 
@@ -80,7 +60,7 @@ class SCPISocket:
                 timeout=self.timeout,
             )
             self._connected = True
-            logger.info(f"Connected to spectrum analyzer at {self.address}")
+            logger.info("Connected to instrument at %s", self.address)
 
         except asyncio.TimeoutError:
             raise ConnectionError(
@@ -94,7 +74,6 @@ class SCPISocket:
             )
 
     async def disconnect(self) -> None:
-        """Close TCP connection."""
         if self._writer is not None:
             try:
                 self._writer.close()
@@ -105,53 +84,30 @@ class SCPISocket:
                 self._writer = None
                 self._reader = None
                 self._connected = False
-                logger.info(f"Disconnected from {self.address}")
+                logger.info("Disconnected from %s", self.address)
 
     async def send(self, command: str) -> None:
-        """
-        Send SCPI command without waiting for response.
-
-        Args:
-            command: SCPI command string
-
-        Raises:
-            ConnectionError: If not connected
-            CommunicationError: If send fails
-        """
         if not self.is_connected:
-            raise ConnectionError("Not connected to spectrum analyzer", self.address)
+            raise ConnectionError("Not connected to instrument", self.address)
 
         async with self._lock:
             try:
-                # Add terminator if not present
                 if not command.endswith(self.TERMINATOR):
                     command += self.TERMINATOR
 
                 self._writer.write(command.encode())
                 await self._writer.drain()
-                logger.debug(f"Sent: {command.strip()}")
+                logger.debug("Sent: %s", command.strip())
 
             except OSError as e:
                 self._connected = False
                 logger.error("Send failed to %s: %s", self.address, e)
                 raise CommunicationError(f"Failed to send command: {e}", self.address)
 
-    async def read_response(self, timeout: float | None = None) -> str:
-        """
-        Read response from instrument.
-
-        Args:
-            timeout: Read timeout in seconds (uses command_timeout if None)
-
-        Returns:
-            Response string (without terminator)
-
-        Raises:
-            TimeoutError: If read times out
-            CommunicationError: If read fails
-        """
+    async def _read_response(self, timeout: float | None = None) -> str:
+        """Read a line response from the instrument."""
         if not self.is_connected:
-            raise ConnectionError("Not connected to spectrum analyzer", self.address)
+            raise ConnectionError("Not connected to instrument", self.address)
 
         timeout = timeout or self.command_timeout
 
@@ -161,7 +117,7 @@ class SCPISocket:
                 timeout=timeout,
             )
             response = data.decode().strip()
-            logger.debug(f"Received: {response[:100]}...")
+            logger.debug("Received: %s...", response[:100])
             return response
 
         except asyncio.TimeoutError:
@@ -172,23 +128,8 @@ class SCPISocket:
             raise CommunicationError(f"Failed to read response: {e}", self.address)
 
     async def query(self, command: str, timeout: float | None = None) -> str:
-        """
-        Send query and wait for response.
-
-        Args:
-            command: SCPI query (should end with '?')
-            timeout: Response timeout in seconds
-
-        Returns:
-            Response string
-
-        Raises:
-            ConnectionError: If not connected
-            TimeoutError: If response times out
-            CommunicationError: If communication fails
-        """
         if not self.is_connected:
-            raise ConnectionError("Not connected to spectrum analyzer", self.address)
+            raise ConnectionError("Not connected to instrument", self.address)
 
         timeout = timeout or self.command_timeout
 
@@ -198,7 +139,7 @@ class SCPISocket:
                     command += self.TERMINATOR
                 self._writer.write(command.encode())
                 await self._writer.drain()
-                logger.debug(f"Sent: {command.strip()}")
+                logger.debug("Sent: %s", command.strip())
             except OSError as e:
                 self._connected = False
                 logger.error("Query send failed to %s: %s", self.address, e)
@@ -210,7 +151,7 @@ class SCPISocket:
                     timeout=timeout,
                 )
                 response = data.decode().strip()
-                logger.debug(f"Received: {response[:100]}...")
+                logger.debug("Received: %s...", response[:100])
                 return response
             except asyncio.TimeoutError:
                 raise TimeoutError(f"Read timed out after {timeout}s", self.address)
@@ -224,26 +165,13 @@ class SCPISocket:
         command: str,
         timeout: float | None = None,
     ) -> bytes:
-        """
-        Send query and read binary response.
-
-        Used for retrieving trace data in binary format.
-
-        Args:
-            command: SCPI query
-            timeout: Response timeout
-
-        Returns:
-            Binary data bytes
-        """
         if not self.is_connected:
-            raise ConnectionError("Not connected to spectrum analyzer", self.address)
+            raise ConnectionError("Not connected to instrument", self.address)
 
         timeout = timeout or self.command_timeout
 
         async with self._lock:
             try:
-                # Send command
                 if not command.endswith(self.TERMINATOR):
                     command += self.TERMINATOR
                 self._writer.write(command.encode())
@@ -255,7 +183,6 @@ class SCPISocket:
                     timeout=timeout,
                 )
                 if header != b"#":
-                    # Not binary format, read as text
                     rest = await self._reader.readline()
                     return header + rest
 
@@ -278,7 +205,7 @@ class SCPISocket:
                 # Read trailing newline
                 await self._reader.read(1)
 
-                logger.debug(f"Received {len(data)} bytes of binary data")
+                logger.debug("Received %d bytes of binary data", len(data))
                 return data
 
             except asyncio.TimeoutError:
@@ -292,16 +219,6 @@ class SCPISocket:
         command: str,
         timeout: float | None = None,
     ) -> list[float]:
-        """
-        Query and parse comma-separated float values.
-
-        Args:
-            command: SCPI query
-            timeout: Response timeout
-
-        Returns:
-            List of float values
-        """
         response = await self.query(command, timeout)
         if not response:
             return []
@@ -312,23 +229,5 @@ class SCPISocket:
             raise CommunicationError(f"Failed to parse float list: {e}", self.address)
 
     async def wait_opc(self, timeout: float | None = None) -> bool:
-        """
-        Wait for operation complete (*OPC?).
-
-        Args:
-            timeout: Timeout in seconds
-
-        Returns:
-            True when operation completes
-        """
         response = await self.query("*OPC?", timeout)
         return response.strip() == "1"
-
-    async def __aenter__(self) -> "SCPISocket":
-        """Async context manager entry."""
-        await self.connect()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """Async context manager exit."""
-        await self.disconnect()

@@ -872,6 +872,31 @@ wheels = [
 ]
 
 [[package]]
+name = "pyvisa"
+version = "1.16.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5f/45/b2cf76f58097040827fc6c61af4cb3ae473ef2fa47bc4f3e582e95fab3a0/pyvisa-1.16.1.tar.gz", hash = "sha256:44d637ef977097cae6247ce621514739e7a68b0e1d683d4e4b191b67f5b4d7b3", size = 238621, upload-time = "2026-01-13T14:47:26.361Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/1e/701cde98f835aaf84cd17851103715615a5ccb2f3d2ce3e215df8b5a4550/pyvisa-1.16.1-py3-none-any.whl", hash = "sha256:b0109a146f1d1a5d66d988fd5ea2a2abafb526f276d7cd60bfdba784513de3a7", size = 181348, upload-time = "2026-01-13T14:47:23.722Z" },
+]
+
+[[package]]
+name = "pyvisa-py"
+version = "0.8.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyvisa" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/8d/0f1af2b39feca8868d0692a2c5d0c47f4ad559a051fb678c441fe1e99536/pyvisa_py-0.8.1.tar.gz", hash = "sha256:db53d3219d971d16b8f7c764a93e08475875063635b9ad8ea3c988439833ccdd", size = 102061, upload-time = "2025-09-04T20:48:21.639Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/0b/06ccf917ce30d78d75e452d0afc89236b1d384b776c5c33d75c8cc55fbe7/pyvisa_py-0.8.1-py3-none-any.whl", hash = "sha256:31208a2933c1793b4e829ba5f07d265b83f280668df440ee7ee6ac505dea4ee9", size = 82206, upload-time = "2025-09-04T20:48:20.13Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "311"
 source = { registry = "https://pypi.org/simple" }
@@ -1030,38 +1055,6 @@ wheels = [
 ]
 
 [[package]]
-name = "rs-spectrum-analyzer-mcp"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "mcp" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "mcp", specifier = ">=1.0.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pydantic-settings", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-]
-provides-extras = ["dev"]
-
-[[package]]
 name = "ruff"
 version = "0.15.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1085,6 +1078,44 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5c/10/3d18e3bbdf8fc50bbb4ac3cc45970aa5a9753c5cb51bf9ed9a3cd8b79fa3/ruff-0.15.2-py3-none-win_amd64.whl", hash = "sha256:d20014e3dfa400f3ff84830dfb5755ece2de45ab62ecea4af6b7262d0fb4f7c5", size = 11623725, upload-time = "2026-02-19T22:32:04.947Z" },
     { url = "https://files.pythonhosted.org/packages/6d/78/097c0798b1dab9f8affe73da9642bb4500e098cb27fd8dc9724816ac747b/ruff-0.15.2-py3-none-win_arm64.whl", hash = "sha256:cabddc5822acdc8f7b5527b36ceac55cc51eec7b1946e60181de8fe83ca8876e", size = 10941649, upload-time = "2026-02-19T22:32:18.108Z" },
 ]
+
+[[package]]
+name = "spectrum-analyzer-mcp"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "mcp" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+visa = [
+    { name = "pyvisa" },
+    { name = "pyvisa-py" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = ">=1.0.0,<2.0.0" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
+    { name = "pyvisa", marker = "extra == 'visa'", specifier = ">=1.13" },
+    { name = "pyvisa-py", marker = "extra == 'visa'", specifier = ">=0.7" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
+]
+provides-extras = ["visa", "dev"]
 
 [[package]]
 name = "sse-starlette"

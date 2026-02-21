@@ -1,4 +1,4 @@
-"""Unified driver for Rohde & Schwarz spectrum/signal analyzers via TCP/IP SCPI."""
+"""Unified driver for spectrum/signal analyzers via SCPI."""
 
 import logging
 from enum import Enum
@@ -21,7 +21,8 @@ from ..models.sa_types import (
     TraceMode,
 )
 from ..safety.validators import SafetyLimits, SafetyValidator, sanitize_scpi_param
-from .scpi_socket import SCPISocket
+from ..transport import SCPITransport, TCPSocketTransport
+from .scpi_socket import SCPISocket  # noqa: F401 – backward compat
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +58,10 @@ class ConnectionState(Enum):
 
 class RSSpectrumAnalyzerDriver:
     """
-    Unified driver for Rohde & Schwarz spectrum/signal analyzers via TCP/IP SCPI.
+    Unified driver for spectrum/signal analyzers via SCPI.
 
-    Supports FSW, FSVA3000, FSV3000, and FPL1000 families through a common
-    interface. Uses TCP/IP socket communication on port 5025.
+    Supports multiple vendors (R&S, Keysight, Rigol, Siglent, Anritsu, Tektronix)
+    through a common SCPI interface. Uses pluggable transports (TCP/IP, VISA).
 
     Example:
         async with RSSpectrumAnalyzerDriver("192.168.1.100", 5025) as sa:
@@ -78,6 +79,7 @@ class RSSpectrumAnalyzerDriver:
         command_timeout: float = 30.0,
         safety_limits: SafetyLimits | None = None,
         family: SpectrumAnalyzerFamily | None = None,
+        transport: SCPITransport | None = None,
     ):
         """
         Initialize spectrum analyzer driver.
@@ -89,11 +91,15 @@ class RSSpectrumAnalyzerDriver:
             command_timeout: Command timeout in seconds
             safety_limits: Custom safety limits (uses defaults if None)
             family: Instrument family (auto-detected if None)
+            transport: Pre-configured transport (overrides host/port/timeout)
         """
         self.host = host
         self.port = port
 
-        self._socket = SCPISocket(host, port, timeout, command_timeout)
+        if transport is not None:
+            self._socket: SCPITransport = transport
+        else:
+            self._socket = TCPSocketTransport(host, port, timeout, command_timeout)
         self._validator = SafetyValidator(safety_limits)
         self._state = ConnectionState.DISCONNECTED
         self._info: InstrumentInfo | None = None
@@ -199,6 +205,43 @@ class RSSpectrumAnalyzerDriver:
         """Query system error."""
         return await self._socket.query("SYST:ERR?")
 
+    async def get_error_queue(self) -> list[str]:
+        """Read all errors from the error queue until empty."""
+        errors: list[str] = []
+        for _ in range(100):  # safety limit
+            resp = await self._socket.query("SYST:ERR?")
+            if resp.startswith("0,") or resp.startswith('0,"'):
+                break
+            errors.append(resp)
+        return errors
+
+    async def set_sweep_points(self, points: int) -> None:
+        """Set number of sweep points."""
+        await self._socket.send(f"SENS:SWE:POIN {points}")
+
+    async def get_sweep_points(self) -> int:
+        """Get number of sweep points."""
+        resp = await self._socket.query("SENS:SWE:POIN?")
+        return int(_parse_float(resp, "sweep_points"))
+
+    async def set_display_update(self, enabled: bool) -> None:
+        """Enable/disable display updates for faster remote operation."""
+        state = "ON" if enabled else "OFF"
+        await self._socket.send(f"SYST:DISP:UPD {state}")
+
+    async def capture_screenshot(self, fmt: str = "PNG") -> bytes:
+        """Capture screenshot and return as bytes."""
+        await self._socket.send(f"HCOP:DEV:LANG {fmt}")
+        await self._socket.send("HCOP:DEST 'MMEM'")
+        await self._socket.send("HCOP:IMM")
+        await self._socket.wait_opc()
+        return await self._socket.query_binary("HCOP:DATA?")
+
+    async def run_alignment(self) -> str:
+        """Run internal self-alignment/calibration."""
+        resp = await self._socket.query("CAL:ALL?", timeout=120.0)
+        return resp
+
     # =========================================================================
     # Frequency Control
     # =========================================================================
@@ -227,9 +270,7 @@ class RSSpectrumAnalyzerDriver:
         self._validator.validate_frequency_range(start_hz, stop_hz)
         await self._socket.send(f"SENS:FREQ:STAR {start_hz}")
         await self._socket.send(f"SENS:FREQ:STOP {stop_hz}")
-        logger.debug(
-            f"Frequency range set to {start_hz / 1e6:.3f} - {stop_hz / 1e6:.3f} MHz"
-        )
+        logger.debug(f"Frequency range set to {start_hz / 1e6:.3f} - {stop_hz / 1e6:.3f} MHz")
 
     async def set_frequency_step(self, step_hz: float) -> None:
         """Set frequency step for manual tuning."""
@@ -370,9 +411,7 @@ class RSSpectrumAnalyzerDriver:
         stop = await self.get_stop_frequency()
 
         # Get trace data (comma-separated amplitude values)
-        amplitudes = await self._socket.query_float_list(
-            f"TRAC:DATA? TRACE{trace_number}"
-        )
+        amplitudes = await self._socket.query_float_list(f"TRAC:DATA? TRACE{trace_number}")
 
         # Build frequency array
         num_points = len(amplitudes)
@@ -433,9 +472,7 @@ class RSSpectrumAnalyzerDriver:
         self._validator.validate_frequency(frequency_hz)
         await self._socket.send(f"CALC:MARK{marker_number}:STAT ON")
         await self._socket.send(f"CALC:MARK{marker_number}:X {frequency_hz}")
-        logger.debug(
-            f"Marker {marker_number} set to {frequency_hz / 1e6:.3f} MHz"
-        )
+        logger.debug(f"Marker {marker_number} set to {frequency_hz / 1e6:.3f} MHz")
 
     async def get_marker(self, marker_number: int = 1) -> MarkerData:
         """Read marker position and value."""
@@ -483,9 +520,7 @@ class RSSpectrumAnalyzerDriver:
         await self._socket.send(f"CALC:DELT{marker_number}:STAT {state}")
         logger.debug(f"Delta marker {marker_number} {'enabled' if enabled else 'disabled'}")
 
-    async def marker_bandwidth(
-        self, n_db: float = 3.0, marker_number: int = 1
-    ) -> dict:
+    async def marker_bandwidth(self, n_db: float = 3.0, marker_number: int = 1) -> dict:
         """
         Measure N-dB bandwidth using marker.
 
@@ -577,7 +612,9 @@ class RSSpectrumAnalyzerDriver:
         parts = resp.split(",")
 
         ch_power = _parse_float(parts[0], "channel_power")
-        ch_density = _parse_float(parts[1], "power_density") if len(parts) > 1 else ch_power - 10 * 1.0  # noqa: E501
+        ch_density = (
+            _parse_float(parts[1], "power_density") if len(parts) > 1 else ch_power - 10 * 1.0
+        )  # noqa: E501
 
         return ChannelPowerResult(
             channel_power_dbm=ch_power,
@@ -705,11 +742,13 @@ class RSSpectrumAnalyzerDriver:
                     measured = float(parts[i + 1])
                     if measured > limit:
                         passed = False
-                        violations.append({
-                            "limit_dbm": limit,
-                            "measured_dbm": measured,
-                            "margin_db": limit - measured,
-                        })
+                        violations.append(
+                            {
+                                "limit_dbm": limit,
+                                "measured_dbm": measured,
+                                "margin_db": limit - measured,
+                            }
+                        )
                 except (ValueError, IndexError) as e:
                     logger.debug("Skipping unparseable SEM segment at index %d: %s", i, e)
 

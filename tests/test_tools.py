@@ -6,8 +6,10 @@ import json
 import pytest
 from mcp.types import CallToolResult
 
-from rs_spectrum_analyzer_mcp.tools import (
-    _TOOL_HANDLERS,
+from spectrum_analyzer_mcp.tools import (
+    _ALL_HANDLERS as _TOOL_HANDLERS,
+)
+from spectrum_analyzer_mcp.tools import (
     _connection_lock,
     _measurement_lock,
     _template_lock,
@@ -44,8 +46,8 @@ class TestToolDefinitions:
     def test_tool_count(self):
         """Verify expected number of tools."""
         tools = get_tools()
-        # We defined ~50 tools
-        assert len(tools) >= 45
+        # 62 tools across 14 categories
+        assert len(tools) >= 55
 
     def test_all_tools_have_handlers(self):
         """Every tool definition must have a handler registered."""
@@ -166,6 +168,19 @@ class TestToolCategories:
         assert "sa_load_state" in names
         assert "sa_get_full_state" in names
 
+    def test_system_tools(self):
+        names = self._tool_names()
+        assert "sa_get_error_queue" in names
+        assert "sa_set_display_update" in names
+        assert "sa_run_alignment" in names
+        assert "sa_set_sweep_points" in names
+        assert "sa_get_sweep_points" in names
+        assert "sa_capture_screenshot" in names
+
+    def test_export_tools_json(self):
+        names = self._tool_names()
+        assert "sa_save_trace_json" in names
+
 
 class TestHandleToolRouting:
     """Test that handle_tool routes to correct handlers."""
@@ -209,12 +224,15 @@ class TestHandleToolRouting:
 
     @pytest.mark.asyncio
     async def test_define_limit(self):
-        result = await handle_tool("sa_define_limit", {
-            "name": "test_limit",
-            "segments": [
-                {"start_freq_hz": 1e9, "stop_freq_hz": 2e9, "max_db": -30.0},
-            ],
-        })
+        result = await handle_tool(
+            "sa_define_limit",
+            {
+                "name": "test_limit",
+                "segments": [
+                    {"start_freq_hz": 1e9, "stop_freq_hz": 2e9, "max_db": -30.0},
+                ],
+            },
+        )
         assert isinstance(result, CallToolResult)
         assert result.isError is False
         data = json.loads(result.content[0].text)
@@ -222,9 +240,12 @@ class TestHandleToolRouting:
 
     @pytest.mark.asyncio
     async def test_load_template_builtin(self):
-        result = await handle_tool("sa_load_template", {
-            "template_name": "cispr_32_class_b",
-        })
+        result = await handle_tool(
+            "sa_load_template",
+            {
+                "template_name": "cispr_32_class_b",
+            },
+        )
         assert isinstance(result, CallToolResult)
         assert result.isError is False
         data = json.loads(result.content[0].text)
@@ -233,9 +254,12 @@ class TestHandleToolRouting:
     @pytest.mark.asyncio
     async def test_load_template_unknown(self):
         """Issue 6: Unknown template returns isError=True."""
-        result = await handle_tool("sa_load_template", {
-            "template_name": "nonexistent",
-        })
+        result = await handle_tool(
+            "sa_load_template",
+            {
+                "template_name": "nonexistent",
+            },
+        )
         assert isinstance(result, CallToolResult)
         assert result.isError is True
         assert "Error" in result.content[0].text
@@ -267,16 +291,17 @@ class TestIsErrorFlag:
     async def test_error_on_apply_template_no_loaded(self):
         """Applying template when none loaded returns isError=True."""
         # Reset template state first
-        import rs_spectrum_analyzer_mcp.tools as tools_mod
-        old_template = tools_mod._current_template
-        tools_mod._current_template = None
+        import spectrum_analyzer_mcp.tools.templates_tools as tmpl_mod
+
+        old_template = tmpl_mod._current_template
+        tmpl_mod._current_template = None
         try:
             result = await handle_tool("sa_apply_template", {})
             assert isinstance(result, CallToolResult)
             assert result.isError is True
             assert "No template loaded" in result.content[0].text
         finally:
-            tools_mod._current_template = old_template
+            tmpl_mod._current_template = old_template
 
 
 class TestAsyncioLocks:

@@ -66,6 +66,18 @@ class DetectorType(Enum):
     CISPR_AVERAGE = "CAV"  # CISPR average (EMI)
 
 
+class InstrumentVendor(Enum):
+    """Known spectrum analyzer vendors."""
+
+    ROHDE_SCHWARZ = "Rohde & Schwarz"
+    KEYSIGHT = "Keysight"
+    RIGOL = "Rigol"
+    SIGLENT = "Siglent"
+    ANRITSU = "Anritsu"
+    TEKTRONIX = "Tektronix"
+    UNKNOWN = "Unknown"
+
+
 class TriggerSource(Enum):
     """Trigger sources for sweep control."""
 
@@ -92,6 +104,7 @@ class InstrumentInfo:
             "model": self.model,
             "serial_number": self.serial_number,
             "firmware_version": self.firmware_version,
+            "vendor": self.detect_vendor().value,
         }
 
     @classmethod
@@ -121,6 +134,25 @@ class InstrumentInfo:
             serial_number=parts[2].strip() if len(parts) > 2 else "Unknown",
             firmware_version=parts[3].strip() if len(parts) > 3 else "Unknown",
         )
+
+    def detect_vendor(self) -> InstrumentVendor:
+        """Detect vendor from manufacturer string."""
+        mfr = self.manufacturer.upper()
+        vendor_map = {
+            "ROHDE&SCHWARZ": InstrumentVendor.ROHDE_SCHWARZ,
+            "ROHDE & SCHWARZ": InstrumentVendor.ROHDE_SCHWARZ,
+            "KEYSIGHT": InstrumentVendor.KEYSIGHT,
+            "KEYSIGHT TECHNOLOGIES": InstrumentVendor.KEYSIGHT,
+            "AGILENT": InstrumentVendor.KEYSIGHT,
+            "AGILENT TECHNOLOGIES": InstrumentVendor.KEYSIGHT,
+            "RIGOL TECHNOLOGIES": InstrumentVendor.RIGOL,
+            "RIGOL": InstrumentVendor.RIGOL,
+            "SIGLENT TECHNOLOGIES": InstrumentVendor.SIGLENT,
+            "SIGLENT": InstrumentVendor.SIGLENT,
+            "ANRITSU": InstrumentVendor.ANRITSU,
+            "TEKTRONIX": InstrumentVendor.TEKTRONIX,
+        }
+        return vendor_map.get(mfr, InstrumentVendor.UNKNOWN)
 
     def detect_family(self) -> SpectrumAnalyzerFamily | None:
         """Detect instrument family from model string."""

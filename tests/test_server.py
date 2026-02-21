@@ -1,7 +1,6 @@
 """Tests for MCP server creation."""
 
-
-from rs_spectrum_analyzer_mcp.server import create_server
+from spectrum_analyzer_mcp.server import create_server
 
 
 class TestServer:
@@ -10,4 +9,4 @@ class TestServer:
     def test_create_server(self):
         server = create_server()
         assert server is not None
-        assert server.name == "rs-spectrum-analyzer-mcp"
+        assert server.name == "spectrum-analyzer-mcp"
