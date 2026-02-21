@@ -1,11 +1,114 @@
 """Safety validators for spectrum analyzer parameters."""
 
 import logging
+import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..exceptions import SafetyError
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# SCPI Input Sanitization
+# =============================================================================
+
+# Characters that could be used for SCPI command injection
+_SCPI_DANGEROUS_CHARS = re.compile(r"[;\n\r]")
+
+
+def sanitize_scpi_param(value: str) -> str:
+    """
+    Sanitize a user-provided string parameter before SCPI interpolation.
+
+    Rejects strings containing SCPI metacharacters that could allow
+    command injection:
+    - `;` (SCPI command separator)
+    - `\\n` and `\\r` (newline characters that could inject commands)
+    - Leading `*` (could trigger instrument commands like *RST, *CLS)
+
+    Numeric parameters validated by SafetyValidator do not need this
+    function -- it is intended for string parameters like filenames,
+    identifiers, modulation type names, and raw command strings.
+
+    Args:
+        value: The user-provided string parameter.
+
+    Returns:
+        The validated string (unchanged if safe).
+
+    Raises:
+        ValueError: If the string contains dangerous SCPI metacharacters.
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"SCPI parameter must be a string, got {type(value).__name__}")
+
+    match = _SCPI_DANGEROUS_CHARS.search(value)
+    if match:
+        char = match.group()
+        char_repr = repr(char)
+        raise ValueError(
+            f"SCPI injection rejected: dangerous character {char_repr} "
+            f"found in parameter: {value!r}"
+        )
+
+    if value.startswith("*"):
+        raise ValueError(
+            f"SCPI injection rejected: parameter must not start with '*' "
+            f"(could trigger instrument commands): {value!r}"
+        )
+
+    return value
+
+
+# =============================================================================
+# File Path Validation
+# =============================================================================
+
+
+def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
+    """
+    Validate that a user-provided path resolves to within a base directory.
+
+    Prevents path traversal attacks (../) and symlink escapes by resolving
+    the path and checking it remains under base_dir.
+
+    Args:
+        user_path: The user-provided file path (or filename).
+        base_dir: The allowed base directory.
+
+    Returns:
+        The resolved, validated Path object.
+
+    Raises:
+        ValueError: If the path resolves outside base_dir or is a
+            symlink pointing outside base_dir.
+    """
+    base_dir = Path(base_dir).resolve()
+    resolved = (base_dir / Path(user_path)).resolve()
+
+    # Check the resolved path is under the base directory
+    if not resolved.is_relative_to(base_dir):
+        raise ValueError(
+            f"Path traversal denied: {user_path!r} resolves to "
+            f"{resolved} which is outside {base_dir}"
+        )
+
+    # Check for symlinks that point outside base_dir
+    # Walk each component to detect intermediate symlink escapes
+    check = base_dir
+    for part in resolved.relative_to(base_dir).parts:
+        check = check / part
+        if check.is_symlink():
+            link_target = check.resolve()
+            if not link_target.is_relative_to(base_dir):
+                raise ValueError(
+                    f"Symlink escape denied: {check} points to "
+                    f"{link_target} which is outside {base_dir}"
+                )
+
+    return resolved
 
 
 @dataclass
