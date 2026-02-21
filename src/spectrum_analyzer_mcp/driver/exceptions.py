@@ -1,7 +1,7 @@
 """Custom exceptions for spectrum analyzer driver.
 
 This module re-exports exceptions from the package root for backwards compatibility.
-Import from rs_spectrum_analyzer_mcp.exceptions for new code.
+Import from spectrum_analyzer_mcp.exceptions for new code.
 """
 
 from ..exceptions import (

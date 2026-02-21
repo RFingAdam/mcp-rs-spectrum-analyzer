@@ -329,18 +329,22 @@ class StateManager:
             try:
                 freq = await sa.scpi_query(f"CALC:MARK{i}:X?")
                 amp = await sa.scpi_query(f"CALC:MARK{i}:Y?")
-                markers.append(MarkerState(
-                    marker_number=i,
-                    enabled=True,
-                    frequency_hz=float(freq),
-                    amplitude_dbm=float(amp),
-                ))
+                markers.append(
+                    MarkerState(
+                        marker_number=i,
+                        enabled=True,
+                        frequency_hz=float(freq),
+                        amplitude_dbm=float(amp),
+                    )
+                )
             except (SpectrumAnalyzerError, ValueError) as e:
                 logger.debug("Marker %d not active or could not be read: %s", i, e)
-                markers.append(MarkerState(
-                    marker_number=i,
-                    enabled=False,
-                ))
+                markers.append(
+                    MarkerState(
+                        marker_number=i,
+                        enabled=False,
+                    )
+                )
 
         return InstrumentState(
             frequency=frequency,
@@ -444,9 +448,7 @@ class StateManager:
         for marker in state.markers:
             if marker.enabled and marker.frequency_hz is not None:
                 await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT ON")
-                await sa.scpi_send(
-                    f"CALC:MARK{marker.marker_number}:X {marker.frequency_hz}"
-                )
+                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:X {marker.frequency_hz}")
             else:
                 await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT OFF")
 
@@ -459,17 +461,21 @@ class StateManager:
         for filepath in self.state_directory.glob("*.json"):
             try:
                 state = InstrumentState.load(filepath)
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "summary": state.get_summary(),
-                })
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "summary": state.get_summary(),
+                    }
+                )
             except (json.JSONDecodeError, KeyError, ValueError, OSError) as e:
                 logger.warning("Failed to load state file %s: %s", filepath, e)
-                states.append({
-                    "filename": filepath.name,
-                    "path": str(filepath),
-                    "error": str(e),
-                })
+                states.append(
+                    {
+                        "filename": filepath.name,
+                        "path": str(filepath),
+                        "error": str(e),
+                    }
+                )
 
         return states

@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from rs_spectrum_analyzer_mcp.templates import (
+from spectrum_analyzer_mcp.templates import (
     ACLRTemplate,
     ChannelPowerTemplate,
     EMIPrecomplianceTemplate,
@@ -12,7 +12,7 @@ from rs_spectrum_analyzer_mcp.templates import (
     OccupiedBandwidthTemplate,
     SpuriousEmissionTemplate,
 )
-from rs_spectrum_analyzer_mcp.templates.base import SAConfig
+from spectrum_analyzer_mcp.templates.base import SAConfig
 
 
 class TestSAConfig:

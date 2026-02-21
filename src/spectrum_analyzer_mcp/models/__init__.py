@@ -1,4 +1,4 @@
-"""Data models for R&S Spectrum Analyzer MCP server."""
+"""Data models for Spectrum Analyzer MCP server."""
 
 from .sa_types import (
     ACLRResult,
@@ -6,6 +6,7 @@ from .sa_types import (
     ChannelPowerResult,
     DetectorType,
     InstrumentInfo,
+    InstrumentVendor,
     MarkerData,
     OBWResult,
     SEMResult,
@@ -21,6 +22,7 @@ __all__ = [
     "ChannelPowerResult",
     "DetectorType",
     "InstrumentInfo",
+    "InstrumentVendor",
     "MarkerData",
     "OBWResult",
     "SEMResult",

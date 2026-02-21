@@ -1,7 +1,6 @@
 """Tests for exception hierarchy."""
 
-
-from rs_spectrum_analyzer_mcp.exceptions import (
+from spectrum_analyzer_mcp.exceptions import (
     CommunicationError,
     ConfigurationError,
     ConnectionError,

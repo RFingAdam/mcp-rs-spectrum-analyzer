@@ -168,8 +168,7 @@ class SafetyValidator:
 
         if frequency_hz < self.limits.min_frequency_hz:
             raise SafetyError(
-                f"Frequency {frequency_hz} Hz below minimum "
-                f"{self.limits.min_frequency_hz} Hz",
+                f"Frequency {frequency_hz} Hz below minimum {self.limits.min_frequency_hz} Hz",
                 parameter="frequency_hz",
                 value=frequency_hz,
                 limit=self.limits.min_frequency_hz,
@@ -177,9 +176,7 @@ class SafetyValidator:
 
         logger.debug(f"Frequency {frequency_hz / 1e6:.3f} MHz validated")
 
-    def validate_frequency_range(
-        self, start_freq_hz: float, stop_freq_hz: float
-    ) -> None:
+    def validate_frequency_range(self, start_freq_hz: float, stop_freq_hz: float) -> None:
         """
         Validate frequency range.
 

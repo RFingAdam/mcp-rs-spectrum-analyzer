@@ -10,7 +10,8 @@ from .exceptions import (
     TimeoutError,
 )
 from .sa_driver import RSSpectrumAnalyzerDriver
-from .scpi_socket import SCPISocket
+from .scpi_dialect import SCPIDialect, detect_dialect
+from .scpi_socket import SCPISocket  # backward compat alias
 
 __all__ = [
     "CommunicationError",
@@ -19,7 +20,9 @@ __all__ = [
     "MeasurementError",
     "RSSpectrumAnalyzerDriver",
     "SafetyError",
+    "SCPIDialect",
     "SCPISocket",
     "SpectrumAnalyzerError",
     "TimeoutError",
+    "detect_dialect",
 ]

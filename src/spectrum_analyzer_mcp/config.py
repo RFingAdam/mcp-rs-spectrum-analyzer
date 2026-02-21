@@ -25,31 +25,26 @@ class SASettings(BaseSettings):
     # Connection defaults
     default_host: str = Field(default="192.168.1.100", description="Default SA host")
     default_port: int = Field(default=5025, description="Default SA port")
+    resource_string: str | None = Field(
+        default=None,
+        description="VISA resource string (e.g. TCPIP::192.168.1.100::INSTR)",
+    )
     connection_timeout: float = Field(default=5.0, description="Connection timeout in seconds")
     command_timeout: float = Field(default=30.0, description="Command timeout in seconds")
 
+    # Discovery
+    discovery_timeout: float = Field(
+        default=2.0, description="VISA/network discovery timeout in seconds"
+    )
+
     # Safety limits
-    max_input_power_dbm: float = Field(
-        default=30.0, description="Maximum input power in dBm"
-    )
-    max_frequency_hz: float = Field(
-        default=90e9, description="Maximum frequency in Hz"
-    )
-    min_frequency_hz: float = Field(
-        default=2.0, description="Minimum frequency in Hz"
-    )
-    max_attenuation_db: float = Field(
-        default=75.0, description="Maximum attenuation in dB"
-    )
-    min_attenuation_db: float = Field(
-        default=0.0, description="Minimum attenuation in dB"
-    )
-    min_rbw_hz: float = Field(
-        default=1.0, description="Minimum resolution bandwidth in Hz"
-    )
-    max_rbw_hz: float = Field(
-        default=10e6, description="Maximum resolution bandwidth in Hz"
-    )
+    max_input_power_dbm: float = Field(default=30.0, description="Maximum input power in dBm")
+    max_frequency_hz: float = Field(default=90e9, description="Maximum frequency in Hz")
+    min_frequency_hz: float = Field(default=2.0, description="Minimum frequency in Hz")
+    max_attenuation_db: float = Field(default=75.0, description="Maximum attenuation in dB")
+    min_attenuation_db: float = Field(default=0.0, description="Minimum attenuation in dB")
+    min_rbw_hz: float = Field(default=1.0, description="Minimum resolution bandwidth in Hz")
+    max_rbw_hz: float = Field(default=10e6, description="Maximum resolution bandwidth in Hz")
 
     # Security
     allow_raw_scpi: bool = Field(

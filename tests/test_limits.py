@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from rs_spectrum_analyzer_mcp.limits import (
+from spectrum_analyzer_mcp.limits import (
     LimitFailure,
     LimitLine,
     LimitManager,
     LimitResult,
     LimitSegment,
 )
-from rs_spectrum_analyzer_mcp.models.sa_types import TraceData
+from spectrum_analyzer_mcp.models.sa_types import TraceData
 
 
 class TestLimitSegment:
@@ -98,18 +98,14 @@ class TestLimitLine:
         return TraceData(frequencies=freqs, amplitudes=amps)
 
     def test_check_all_pass(self):
-        limit = LimitLine.create_flat_limit(
-            "test", 1e9, 3e9, max_db=-10.0
-        )
+        limit = LimitLine.create_flat_limit("test", 1e9, 3e9, max_db=-10.0)
         trace = self._make_trace()
         result = limit.check(trace)
         assert result.passed is True
         assert result.failed_points == 0
 
     def test_check_with_failures(self):
-        limit = LimitLine.create_flat_limit(
-            "test", 1e9, 3e9, max_db=-30.0
-        )
+        limit = LimitLine.create_flat_limit("test", 1e9, 3e9, max_db=-30.0)
         trace = self._make_trace()
         result = limit.check(trace)
         assert result.passed is False
@@ -117,9 +113,7 @@ class TestLimitLine:
         assert result.worst_failure is not None
 
     def test_check_single_point(self):
-        limit = LimitLine.create_flat_limit(
-            "test", 1e9, 3e9, max_db=-30.0
-        )
+        limit = LimitLine.create_flat_limit("test", 1e9, 3e9, max_db=-30.0)
         # Below limit
         assert limit.check_single_point(1.5e9, -40.0) is None
         # Above limit
@@ -127,9 +121,7 @@ class TestLimitLine:
         assert failure is not None
 
     def test_get_limit_at_frequency(self):
-        limit = LimitLine.create_flat_limit(
-            "test", 1e9, 3e9, max_db=-30.0
-        )
+        limit = LimitLine.create_flat_limit("test", 1e9, 3e9, max_db=-30.0)
         result = limit.get_limit_at_frequency(2e9)
         assert result["max_db"] == -30.0
 
@@ -137,9 +129,7 @@ class TestLimitLine:
         assert result["max_db"] is None
 
     def test_save_load_roundtrip(self):
-        limit = LimitLine.create_flat_limit(
-            "test_limit", 1e9, 3e9, max_db=-30.0, min_db=-80.0
-        )
+        limit = LimitLine.create_flat_limit("test_limit", 1e9, 3e9, max_db=-30.0, min_db=-80.0)
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             filepath = f.name
 

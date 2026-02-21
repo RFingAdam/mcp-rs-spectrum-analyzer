@@ -62,8 +62,7 @@ class HarmonicTemplate(MeasurementTemplate):
         return cls(
             name=f"Harmonics of {fundamental_hz / 1e6:.1f} MHz",
             description=(
-                f"Measure fundamental + {num_harmonics} harmonics of "
-                f"{fundamental_hz / 1e6:.3f} MHz"
+                f"Measure fundamental + {num_harmonics} harmonics of {fundamental_hz / 1e6:.3f} MHz"
             ),
             config=SAConfig(
                 center_frequency_hz=max_freq / 2,
@@ -79,8 +78,6 @@ class HarmonicTemplate(MeasurementTemplate):
             num_harmonics=num_harmonics,
             harmonic_span_hz=fundamental_hz * 0.05,
             metadata={
-                "harmonic_frequencies": [
-                    fundamental_hz * n for n in range(1, num_harmonics + 1)
-                ],
+                "harmonic_frequencies": [fundamental_hz * n for n in range(1, num_harmonics + 1)],
             },
         )

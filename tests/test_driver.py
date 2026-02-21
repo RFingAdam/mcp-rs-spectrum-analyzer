@@ -4,17 +4,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from rs_spectrum_analyzer_mcp.driver.sa_driver import (
+from spectrum_analyzer_mcp.driver.sa_driver import (
     ConnectionState,
     RSSpectrumAnalyzerDriver,
     _parse_float,
 )
-from rs_spectrum_analyzer_mcp.exceptions import (
+from spectrum_analyzer_mcp.exceptions import (
     ConfigurationError,
     MeasurementError,
     SafetyError,
 )
-from rs_spectrum_analyzer_mcp.models.sa_types import (
+from spectrum_analyzer_mcp.models.sa_types import (
     DetectorType,
     InstrumentInfo,
     SpectrumAnalyzerFamily,
@@ -89,9 +89,7 @@ class TestRSSpectrumAnalyzerDriver:
         mock_socket.is_connected = True
         mock_socket.connect = AsyncMock()
         mock_socket.disconnect = AsyncMock()
-        mock_socket.query = AsyncMock(
-            return_value="Rohde&Schwarz,FSW-26,SN123,1.0"
-        )
+        mock_socket.query = AsyncMock(return_value="Rohde&Schwarz,FSW-26,SN123,1.0")
 
         driver = self._make_driver(mock_socket)
         await driver.connect()
@@ -211,16 +209,16 @@ class TestRSSpectrumAnalyzerDriver:
     async def test_get_trace_data(self):
         mock_socket = AsyncMock()
         mock_socket.is_connected = True
-        mock_socket.query = AsyncMock(side_effect=[
-            "1000000000.0",  # start freq
-            "2000000000.0",  # stop freq
-            "1000000.0",     # rbw
-            "3000000.0",     # vbw
-            "0.0",           # ref level
-        ])
-        mock_socket.query_float_list = AsyncMock(
-            return_value=[-80.0, -70.0, -60.0, -70.0, -80.0]
+        mock_socket.query = AsyncMock(
+            side_effect=[
+                "1000000000.0",  # start freq
+                "2000000000.0",  # stop freq
+                "1000000.0",  # rbw
+                "3000000.0",  # vbw
+                "0.0",  # ref level
+            ]
         )
+        mock_socket.query_float_list = AsyncMock(return_value=[-80.0, -70.0, -60.0, -70.0, -80.0])
 
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
@@ -257,10 +255,12 @@ class TestRSSpectrumAnalyzerDriver:
         mock_socket = AsyncMock()
         mock_socket.is_connected = True
         mock_socket.send = AsyncMock()
-        mock_socket.query = AsyncMock(side_effect=[
-            "1500000000.0",  # marker freq
-            "-45.5",          # marker amplitude
-        ])
+        mock_socket.query = AsyncMock(
+            side_effect=[
+                "1500000000.0",  # marker freq
+                "-45.5",  # marker amplitude
+            ]
+        )
 
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
@@ -305,14 +305,16 @@ class TestRSSpectrumAnalyzerDriver:
     async def test_get_status_connected(self):
         mock_socket = AsyncMock()
         mock_socket.is_connected = True
-        mock_socket.query = AsyncMock(side_effect=[
-            "1000000000.0",  # center
-            "100000000.0",   # span
-            "0.0",           # ref level
-            "1000.0",        # rbw
-            "3000.0",        # vbw
-            "10.0",          # attenuation
-        ])
+        mock_socket.query = AsyncMock(
+            side_effect=[
+                "1000000000.0",  # center
+                "100000000.0",  # span
+                "0.0",  # ref level
+                "1000.0",  # rbw
+                "3000.0",  # vbw
+                "10.0",  # attenuation
+            ]
+        )
 
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED

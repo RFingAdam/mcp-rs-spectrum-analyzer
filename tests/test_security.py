@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from rs_spectrum_analyzer_mcp.config import SASettings
-from rs_spectrum_analyzer_mcp.safety.validators import sanitize_scpi_param, validate_safe_path
+from spectrum_analyzer_mcp.config import SASettings
+from spectrum_analyzer_mcp.safety.validators import sanitize_scpi_param, validate_safe_path
 
 # =============================================================================
 # Issue 1: sanitize_scpi_param tests
@@ -155,11 +155,9 @@ class TestValidateSafePath:
 
     def test_rejects_symlink_escape(self, tmp_path):
         """Symlink pointing outside base_dir must be rejected."""
-        # Create a symlink inside tmp_path that points to /tmp
         link = tmp_path / "evil_link"
         link.symlink_to("/tmp")
 
-        # May be caught by is_relative_to check or explicit symlink check
         with pytest.raises(ValueError, match="(Path traversal denied|Symlink escape denied)"):
             validate_safe_path("evil_link/data.json", tmp_path)
 
@@ -221,31 +219,33 @@ class TestRawScpiConfig:
         assert settings.allow_raw_scpi is True
 
 
+_SCPI_SETTINGS = "spectrum_analyzer_mcp.tools.scpi.get_settings"
+_SCPI_GET_SA = "spectrum_analyzer_mcp.tools.scpi._get_sa"
+_SCPI_LOGGER = "spectrum_analyzer_mcp.tools.scpi"
+
+
 class TestRawScpiGuard:
-    """Tests for raw SCPI handler guards in tools.py."""
+    """Tests for raw SCPI handler guards."""
 
     @pytest.fixture
     def mock_settings_allow(self):
         """Settings with raw SCPI allowed."""
-        settings = SASettings(allow_raw_scpi=True)
-        return settings
+        return SASettings(allow_raw_scpi=True)
 
     @pytest.fixture
     def mock_settings_deny(self):
         """Settings with raw SCPI denied."""
-        settings = SASettings(allow_raw_scpi=False)
-        return settings
+        return SASettings(allow_raw_scpi=False)
 
     @pytest.mark.asyncio
     async def test_scpi_send_blocked_when_disabled(self, mock_settings_deny):
         """sa_scpi_send should return error when allow_raw_scpi=False."""
         from mcp.types import CallToolResult
 
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_send
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_send
 
-        with patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_deny):
+        with patch(_SCPI_SETTINGS, return_value=mock_settings_deny):
             result = await _handle_scpi_send({"command": "*RST"})
-            # _handle_scpi_send returns CallToolResult with isError=True when blocked
             if isinstance(result, CallToolResult):
                 assert result.isError is True
                 assert len(result.content) == 1
@@ -259,11 +259,10 @@ class TestRawScpiGuard:
         """sa_scpi_query should return error when allow_raw_scpi=False."""
         from mcp.types import CallToolResult
 
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_query
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_query
 
-        with patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_deny):
+        with patch(_SCPI_SETTINGS, return_value=mock_settings_deny):
             result = await _handle_scpi_query({"command": "*IDN?"})
-            # _handle_scpi_query returns CallToolResult with isError=True when blocked
             if isinstance(result, CallToolResult):
                 assert result.isError is True
                 assert len(result.content) == 1
@@ -275,14 +274,14 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_send_allowed_when_enabled(self, mock_settings_allow, mock_scpi_socket):
         """sa_scpi_send should execute when allow_raw_scpi=True."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_send
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_send
 
         mock_sa = AsyncMock()
         mock_sa.scpi_send = AsyncMock()
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_allow),
-            patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa),
+            patch(_SCPI_SETTINGS, return_value=mock_settings_allow),
+            patch(_SCPI_GET_SA, return_value=mock_sa),
         ):
             result = await _handle_scpi_send({"command": "SENS:FREQ:CENT?"})
             assert len(result) == 1
@@ -292,14 +291,14 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_query_allowed_when_enabled(self, mock_settings_allow, mock_scpi_socket):
         """sa_scpi_query should execute when allow_raw_scpi=True."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_query
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_query
 
         mock_sa = AsyncMock()
         mock_sa.scpi_query = AsyncMock(return_value="1.0")
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_allow),
-            patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa),
+            patch(_SCPI_SETTINGS, return_value=mock_settings_allow),
+            patch(_SCPI_GET_SA, return_value=mock_sa),
         ):
             result = await _handle_scpi_query({"command": "*IDN?"})
             assert len(result) == 1
@@ -309,15 +308,15 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_send_logs_warning(self, mock_settings_allow, caplog):
         """Raw SCPI send should log WARNING with the command string."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_send
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_send
 
         mock_sa = AsyncMock()
         mock_sa.scpi_send = AsyncMock()
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_allow),
-            patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa),
-            caplog.at_level(logging.WARNING, logger="rs_spectrum_analyzer_mcp.tools"),
+            patch(_SCPI_SETTINGS, return_value=mock_settings_allow),
+            patch(_SCPI_GET_SA, return_value=mock_sa),
+            caplog.at_level(logging.WARNING, logger=_SCPI_LOGGER),
         ):
             await _handle_scpi_send({"command": "SENS:FREQ:CENT 1e9"})
             assert any("Raw SCPI send" in record.message for record in caplog.records)
@@ -326,15 +325,15 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_query_logs_warning(self, mock_settings_allow, caplog):
         """Raw SCPI query should log WARNING with the command string."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_query
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_query
 
         mock_sa = AsyncMock()
         mock_sa.scpi_query = AsyncMock(return_value="1.0")
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_allow),
-            patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa),
-            caplog.at_level(logging.WARNING, logger="rs_spectrum_analyzer_mcp.tools"),
+            patch(_SCPI_SETTINGS, return_value=mock_settings_allow),
+            patch(_SCPI_GET_SA, return_value=mock_sa),
+            caplog.at_level(logging.WARNING, logger=_SCPI_LOGGER),
         ):
             await _handle_scpi_query({"command": "*IDN?"})
             assert any("Raw SCPI query" in record.message for record in caplog.records)
@@ -343,18 +342,18 @@ class TestRawScpiGuard:
     @pytest.mark.asyncio
     async def test_scpi_send_blocked_logs_warning(self, mock_settings_deny, caplog):
         """Blocked raw SCPI send should also log WARNING."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_scpi_send
+        from spectrum_analyzer_mcp.tools.scpi import _handle_scpi_send
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools.get_settings", return_value=mock_settings_deny),
-            caplog.at_level(logging.WARNING, logger="rs_spectrum_analyzer_mcp.tools"),
+            patch(_SCPI_SETTINGS, return_value=mock_settings_deny),
+            caplog.at_level(logging.WARNING, logger=_SCPI_LOGGER),
         ):
             await _handle_scpi_send({"command": "*RST"})
             assert any("blocked" in record.message.lower() for record in caplog.records)
 
 
 # =============================================================================
-# Integration: sanitizer applied in tools.py handlers
+# Integration: sanitizer applied in tool handlers
 # =============================================================================
 
 
@@ -364,46 +363,50 @@ class TestScpiSanitizationInHandlers:
     @pytest.mark.asyncio
     async def test_evm_handler_rejects_injection(self):
         """_handle_measure_evm should reject modulation with semicolons."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_measure_evm
+        from spectrum_analyzer_mcp.tools.measurements import _handle_measure_evm
 
         mock_sa = AsyncMock()
-        with patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa):
-            # The handler should raise ValueError from sanitize_scpi_param
-            # which gets caught by the outer handler and returned as error
+        with patch("spectrum_analyzer_mcp.tools.measurements._get_sa", return_value=mock_sa):
             with pytest.raises(ValueError, match="SCPI injection rejected"):
-                await _handle_measure_evm({
-                    "modulation": "QPSK;*RST",
-                    "host": "192.168.1.100",
-                    "port": 5025,
-                })
+                await _handle_measure_evm(
+                    {
+                        "modulation": "QPSK;*RST",
+                        "host": "192.168.1.100",
+                        "port": 5025,
+                    }
+                )
 
     @pytest.mark.asyncio
     async def test_screenshot_handler_rejects_injection(self):
         """_handle_save_screenshot should reject filepath with semicolons."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_save_screenshot
+        from spectrum_analyzer_mcp.tools.export import _handle_save_screenshot
 
         mock_sa = AsyncMock()
-        with patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa):
+        with patch("spectrum_analyzer_mcp.tools.export._get_sa", return_value=mock_sa):
             with pytest.raises(ValueError, match="SCPI injection rejected"):
-                await _handle_save_screenshot({
-                    "filepath": "test.png';*RST;'",
-                    "host": "192.168.1.100",
-                    "port": 5025,
-                })
+                await _handle_save_screenshot(
+                    {
+                        "filepath": "test.png';*RST;'",
+                        "host": "192.168.1.100",
+                        "port": 5025,
+                    }
+                )
 
     @pytest.mark.asyncio
     async def test_screenshot_handler_rejects_newline_injection(self):
         """_handle_save_screenshot should reject filepath with newlines."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_save_screenshot
+        from spectrum_analyzer_mcp.tools.export import _handle_save_screenshot
 
         mock_sa = AsyncMock()
-        with patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa):
+        with patch("spectrum_analyzer_mcp.tools.export._get_sa", return_value=mock_sa):
             with pytest.raises(ValueError, match="SCPI injection rejected"):
-                await _handle_save_screenshot({
-                    "filepath": "test.png\n*RST",
-                    "host": "192.168.1.100",
-                    "port": 5025,
-                })
+                await _handle_save_screenshot(
+                    {
+                        "filepath": "test.png\n*RST",
+                        "host": "192.168.1.100",
+                        "port": 5025,
+                    }
+                )
 
 
 class TestPathValidationInHandlers:
@@ -412,39 +415,41 @@ class TestPathValidationInHandlers:
     @pytest.mark.asyncio
     async def test_save_state_rejects_traversal(self):
         """_handle_save_state should reject names with path traversal."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_save_state, _state_manager
+        from spectrum_analyzer_mcp.tools.state_tools import _handle_save_state, _state_manager
 
         mock_sa = AsyncMock()
         mock_sa.scpi_query = AsyncMock(return_value="1000000000")
         mock_sa.info = None
 
         with (
-            patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa),
-            patch.object(
-                _state_manager, "capture_state", new_callable=AsyncMock
-            ) as mock_capture,
+            patch("spectrum_analyzer_mcp.tools.state_tools._get_sa", return_value=mock_sa),
+            patch.object(_state_manager, "capture_state", new_callable=AsyncMock) as mock_capture,
         ):
             mock_state = AsyncMock()
             mock_state.notes = ""
             mock_capture.return_value = mock_state
 
             with pytest.raises(ValueError, match="Path traversal denied"):
-                await _handle_save_state({
-                    "name": "../../etc/evil",
-                    "host": "192.168.1.100",
-                    "port": 5025,
-                })
+                await _handle_save_state(
+                    {
+                        "name": "../../etc/evil",
+                        "host": "192.168.1.100",
+                        "port": 5025,
+                    }
+                )
 
     @pytest.mark.asyncio
     async def test_load_state_rejects_traversal(self):
         """_handle_load_state should reject names with path traversal."""
-        from rs_spectrum_analyzer_mcp.tools import _handle_load_state
+        from spectrum_analyzer_mcp.tools.state_tools import _handle_load_state
 
         mock_sa = AsyncMock()
-        with patch("rs_spectrum_analyzer_mcp.tools._get_sa", return_value=mock_sa):
+        with patch("spectrum_analyzer_mcp.tools.state_tools._get_sa", return_value=mock_sa):
             with pytest.raises(ValueError, match="Path traversal denied"):
-                await _handle_load_state({
-                    "name": "../../../etc/passwd",
-                    "host": "192.168.1.100",
-                    "port": 5025,
-                })
+                await _handle_load_state(
+                    {
+                        "name": "../../../etc/passwd",
+                        "host": "192.168.1.100",
+                        "port": 5025,
+                    }
+                )

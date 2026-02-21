@@ -1,12 +1,12 @@
 """Tests for data models."""
 
-
-from rs_spectrum_analyzer_mcp.models.sa_types import (
+from spectrum_analyzer_mcp.models.sa_types import (
     ACLRResult,
     BandwidthResult,
     ChannelPowerResult,
     DetectorType,
     InstrumentInfo,
+    InstrumentVendor,
     MarkerData,
     OBWResult,
     SEMResult,
@@ -101,6 +101,27 @@ class TestInstrumentInfo:
         d = info.to_dict()
         assert d["manufacturer"] == "Rohde&Schwarz"
         assert d["model"] == "FSW-26"
+        assert d["vendor"] == "Rohde & Schwarz"
+
+    def test_detect_vendor_rohde_schwarz(self):
+        info = InstrumentInfo("Rohde&Schwarz", "FSW-26", "12345", "1.0")
+        assert info.detect_vendor() == InstrumentVendor.ROHDE_SCHWARZ
+
+    def test_detect_vendor_keysight(self):
+        info = InstrumentInfo("Keysight Technologies", "N9040B", "12345", "1.0")
+        assert info.detect_vendor() == InstrumentVendor.KEYSIGHT
+
+    def test_detect_vendor_rigol(self):
+        info = InstrumentInfo("RIGOL TECHNOLOGIES", "DSA832E", "12345", "1.0")
+        assert info.detect_vendor() == InstrumentVendor.RIGOL
+
+    def test_detect_vendor_siglent(self):
+        info = InstrumentInfo("Siglent Technologies", "SSA3021X", "12345", "1.0")
+        assert info.detect_vendor() == InstrumentVendor.SIGLENT
+
+    def test_detect_vendor_unknown(self):
+        info = InstrumentInfo("SomeMfr", "SomeModel", "12345", "1.0")
+        assert info.detect_vendor() == InstrumentVendor.UNKNOWN
 
 
 class TestTraceData:

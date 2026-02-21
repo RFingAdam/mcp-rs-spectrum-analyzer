@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rs-spectrum-analyzer-mcp"
-version = "0.1.0"
-description = "MCP server for Rohde & Schwarz spectrum/signal analyzer automation via TCP/IP SCPI"
+name = "spectrum-analyzer-mcp"
+version = "0.2.0"
+description = "MCP server for spectrum/signal analyzer automation via SCPI (R&S, Keysight, Rigol, Siglent, Anritsu, Tektronix)"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -15,11 +15,15 @@ authors = [
 keywords = [
     "mcp",
     "spectrum-analyzer",
-    "rohde-schwarz",
     "scpi",
     "test-automation",
     "rf-testing",
     "emc",
+    "rohde-schwarz",
+    "keysight",
+    "rigol",
+    "siglent",
+    "anritsu",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -35,12 +39,16 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2.0.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
 ]
 
 [project.optional-dependencies]
+visa = [
+    "pyvisa>=1.13",
+    "pyvisa-py>=0.7",
+]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
@@ -50,7 +58,7 @@ dev = [
 ]
 
 [project.scripts]
-rs-spectrum-analyzer-mcp = "rs_spectrum_analyzer_mcp.__main__:main"
+spectrum-analyzer-mcp = "spectrum_analyzer_mcp.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/RFingAdam/mcp-rs-spectrum-analyzer"
@@ -58,7 +66,7 @@ Repository = "https://github.com/RFingAdam/mcp-rs-spectrum-analyzer"
 Issues = "https://github.com/RFingAdam/mcp-rs-spectrum-analyzer/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/rs_spectrum_analyzer_mcp"]
+packages = ["src/spectrum_analyzer_mcp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

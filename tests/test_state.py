@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_spectrum_analyzer_mcp.exceptions import CommunicationError, SpectrumAnalyzerError
-from rs_spectrum_analyzer_mcp.state import (
+from spectrum_analyzer_mcp.exceptions import CommunicationError, SpectrumAnalyzerError
+from spectrum_analyzer_mcp.state import (
     AmplitudeState,
     BandwidthState,
     FrequencyState,
@@ -278,9 +278,7 @@ class TestStateManagerRestore:
         sa = AsyncMock()
         sa.info = None
         # Make capture_state fail by making scpi_query fail
-        sa.scpi_query = AsyncMock(
-            side_effect=CommunicationError("Cannot query", "test:5025")
-        )
+        sa.scpi_query = AsyncMock(side_effect=CommunicationError("Cannot query", "test:5025"))
 
         target_state = InstrumentState(
             frequency=FrequencyState(2e9, 200e6, 1.9e9, 2.1e9),
