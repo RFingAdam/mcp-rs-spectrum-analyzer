@@ -130,12 +130,32 @@ def get_measurement_tools() -> list[Tool]:
 
 
 async def _handle_measure_channel_power(args: dict[str, Any]) -> list[TextContent]:
+    """Measure channel power at a given frequency and bandwidth.
+
+    Args:
+        args: center_hz, bandwidth_hz, host, port.
+
+    Returns:
+        Channel power (dBm), power density (dBm/Hz), bandwidth.
+
+    SCPI: SENS:POW:ACH:BWID, CALC:MARK:FUNC:POW:SEL CPOW, CALC:MARK:FUNC:POW:RES?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     result = await sa.measure_channel_power(args["center_hz"], args["bandwidth_hz"])
     return _format_result(result.to_dict())
 
 
 async def _handle_measure_aclr(args: dict[str, Any]) -> list[TextContent]:
+    """Measure adjacent channel leakage ratio (ACLR).
+
+    Args:
+        args: center_hz, channel_bw_hz, adjacent_bw_hz, adjacent_offset_hz, host, port.
+
+    Returns:
+        Channel power, lower/upper adjacent power, ACLR values in dB.
+
+    SCPI: SENS:POW:ACH:BWID, CALC:MARK:FUNC:POW:SEL ACP, CALC:MARK:FUNC:POW:RES?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     result = await sa.measure_aclr(
         args["center_hz"],
@@ -147,18 +167,48 @@ async def _handle_measure_aclr(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_measure_obw(args: dict[str, Any]) -> list[TextContent]:
+    """Measure occupied bandwidth (power percentage method).
+
+    Args:
+        args: power_percentage (default 99.0), host, port.
+
+    Returns:
+        Occupied bandwidth (Hz), center frequency, power percentage.
+
+    SCPI: CALC:MARK:FUNC:POW:SEL OBW, CALC:MARK:FUNC:POW:RES?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     result = await sa.measure_obw(args.get("power_percentage", 99.0))
     return _format_result(result.to_dict())
 
 
 async def _handle_measure_sem(args: dict[str, Any]) -> list[TextContent]:
+    """Measure spectrum emission mask (SEM) with pass/fail result.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Pass/fail status, TX power, and any limit violations.
+
+    SCPI: CALC:LIM:FAIL?, CALC:MARK:FUNC:POW:RES?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     result = await sa.measure_sem()
     return _format_result(result.to_dict())
 
 
 async def _handle_measure_evm(args: dict[str, Any]) -> list[TextContent]:
+    """Measure error vector magnitude (requires digital demod option).
+
+    Args:
+        args: modulation (e.g. QPSK, 16QAM), host, port.
+
+    Returns:
+        EVM percentage for the specified modulation type.
+
+    SCPI: SENS:DDEM:FORM, CALC:MARK:FUNC:DDEM:EVM?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     modulation = sanitize_scpi_param(args.get("modulation", "QPSK"))
     await sa.scpi_send(f"SENS:DDEM:FORM {modulation}")
@@ -182,6 +232,16 @@ async def _handle_measure_evm(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_measure_ccdf(args: dict[str, Any]) -> list[TextContent]:
+    """Measure complementary cumulative distribution function (CCDF/crest factor).
+
+    Args:
+        args: num_samples (default 1000000), host, port.
+
+    Returns:
+        Crest factor (dB), mean power (dBm), peak power (dBm).
+
+    SCPI: CALC:STAT:CCDF ON, CALC:STAT:NSAM, CALC:STAT:RES?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     num_samples = args.get("num_samples", 1000000)
     await sa.scpi_send("CALC:STAT:CCDF ON")

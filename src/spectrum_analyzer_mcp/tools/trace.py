@@ -120,6 +120,16 @@ def get_trace_tools() -> list[Tool]:
 
 
 async def _handle_get_trace_data(args: dict[str, Any]) -> list[TextContent]:
+    """Read trace data from the instrument.
+
+    Args:
+        args: trace_number (1-6), include_raw_data (bool), host, port.
+
+    Returns:
+        Trace summary (or full data if include_raw_data=True) with peak info.
+
+    SCPI: TRAC:DATA? TRACEn, SENS:FREQ:STAR?, SENS:FREQ:STOP?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
     if args.get("include_raw_data", False):
@@ -128,6 +138,16 @@ async def _handle_get_trace_data(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_trace_mode(args: dict[str, Any]) -> list[TextContent]:
+    """Set trace mode (clear/write, max hold, min hold, or average).
+
+    Args:
+        args: mode (WRITe|MAXHold|MINHold|AVERage), trace_number, host, port.
+
+    Returns:
+        Confirmed trace mode.
+
+    SCPI: DISP:TRACn:MODE.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     mode = TraceMode(args["mode"])
     await sa.set_trace_mode(mode, args.get("trace_number", 1))
@@ -135,18 +155,48 @@ async def _handle_set_trace_mode(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_averaging_count(args: dict[str, Any]) -> list[TextContent]:
+    """Set trace averaging count.
+
+    Args:
+        args: count (1 = off), host, port.
+
+    Returns:
+        Confirmed averaging count.
+
+    SCPI: SENS:AVER:COUN, SENS:AVER:STAT ON|OFF.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_averaging_count(args["count"])
     return _format_result({"averaging_count": args["count"]})
 
 
 async def _handle_clear_trace(args: dict[str, Any]) -> list[TextContent]:
+    """Clear and reset a trace to clear-write mode.
+
+    Args:
+        args: trace_number (default 1), host, port.
+
+    Returns:
+        Confirmation that trace was cleared.
+
+    SCPI: DISP:TRACn:MODE WRITe.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.clear_trace(args.get("trace_number", 1))
     return _format_result({"trace_cleared": True})
 
 
 async def _handle_set_detector(args: dict[str, Any]) -> list[TextContent]:
+    """Set the detector type for trace acquisition.
+
+    Args:
+        args: detector (POS|RMS|AVER|SAMP|QPE|NEG), trace_number, host, port.
+
+    Returns:
+        Confirmed detector type.
+
+    SCPI: SENS:DET:FUNC.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     detector = DetectorType(args["detector"])
     await sa.set_detector(detector, args.get("trace_number", 1))

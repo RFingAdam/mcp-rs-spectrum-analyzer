@@ -97,6 +97,16 @@ def get_export_tools() -> list[Tool]:
 
 
 async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
+    """Save trace data to a CSV file.
+
+    Args:
+        args: filepath, trace_number (default 1), host, port.
+
+    Returns:
+        Filepath, number of points, and save confirmation.
+
+    SCPI: TRAC:DATA? TRACEn (to read trace before saving).
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
 
@@ -122,6 +132,16 @@ async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_save_screenshot(args: dict[str, Any]) -> list[TextContent]:
+    """Save instrument screenshot to a file on the instrument.
+
+    Args:
+        args: filepath (path on instrument), host, port.
+
+    Returns:
+        Filepath and save confirmation.
+
+    SCPI: HCOP:DEV:LANG PNG, MMEM:NAME, HCOP:IMM.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     filepath = args["filepath"]
     safe_filepath = sanitize_scpi_param(filepath)
@@ -138,12 +158,32 @@ async def _handle_save_screenshot(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_export_trace_data(args: dict[str, Any]) -> list[TextContent]:
+    """Export trace data as JSON in the tool response.
+
+    Args:
+        args: trace_number (default 1), host, port.
+
+    Returns:
+        Full trace data dict (frequencies, amplitudes, metadata).
+
+    SCPI: TRAC:DATA? TRACEn.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
     return _format_result(trace.to_dict())
 
 
 async def _handle_save_trace_json(args: dict[str, Any]) -> list[TextContent]:
+    """Save trace data to a JSON file with instrument metadata.
+
+    Args:
+        args: filepath, trace_number (default 1), host, port.
+
+    Returns:
+        Filepath, number of points, and save confirmation.
+
+    SCPI: TRAC:DATA? TRACEn, *IDN?.
+    """
     import json
 
     sa = await _get_sa(args.get("host"), args.get("port"))

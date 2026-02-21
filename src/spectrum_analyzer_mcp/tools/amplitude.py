@@ -83,24 +83,64 @@ def get_amplitude_tools() -> list[Tool]:
 
 
 async def _handle_set_reference_level(args: dict[str, Any]) -> list[TextContent]:
+    """Set the reference level (top of display).
+
+    Args:
+        args: level_dbm, host, port.
+
+    Returns:
+        Confirmed reference level in dBm.
+
+    SCPI: DISP:TRAC:Y:RLEV.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_reference_level(args["level_dbm"])
     return _format_result({"reference_level_dbm": args["level_dbm"]})
 
 
 async def _handle_set_attenuation(args: dict[str, Any]) -> list[TextContent]:
+    """Set RF input attenuation.
+
+    Args:
+        args: attenuation_db (0-75), host, port.
+
+    Returns:
+        Confirmed attenuation value in dB.
+
+    SCPI: INP:ATT.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_attenuation(args["attenuation_db"])
     return _format_result({"attenuation_db": args["attenuation_db"]})
 
 
 async def _handle_set_preamp(args: dict[str, Any]) -> list[TextContent]:
+    """Enable or disable the internal preamplifier.
+
+    Args:
+        args: enabled (bool), host, port.
+
+    Returns:
+        Confirmed preamplifier state.
+
+    SCPI: INP:GAIN:STAT ON|OFF.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_preamp(args["enabled"])
     return _format_result({"preamp_enabled": args["enabled"]})
 
 
 async def _handle_set_scale(args: dict[str, Any]) -> list[TextContent]:
+    """Set Y-axis scale in dB per division.
+
+    Args:
+        args: db_per_div, host, port.
+
+    Returns:
+        Confirmed scale value.
+
+    SCPI: DISP:TRAC:Y:PDIV.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_scale(args["db_per_div"])
     return _format_result({"scale_db_per_div": args["db_per_div"]})

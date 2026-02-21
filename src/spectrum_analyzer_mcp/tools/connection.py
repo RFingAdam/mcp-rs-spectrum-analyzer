@@ -116,6 +116,16 @@ def get_connection_tools() -> list[Tool]:
 
 
 async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
+    """Scan a port range for spectrum analyzers.
+
+    Args:
+        args: host, start_port (default 5025), end_port (default 5035).
+
+    Returns:
+        List of found instruments with host, port, and identification.
+
+    SCPI: *IDN? on each port to detect instruments.
+    """
     settings = get_settings()
     host = args.get("host", settings.default_host)
     start_port = args.get("start_port", 5025)
@@ -143,6 +153,16 @@ async def _handle_discover(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_connect(args: dict[str, Any]) -> list[TextContent]:
+    """Connect to a spectrum analyzer via TCP or VISA resource string.
+
+    Args:
+        args: host, port, or resource (VISA string).
+
+    Returns:
+        Connection status, instrument info, and detected family.
+
+    SCPI: *IDN? to identify instrument after connecting.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"), args.get("resource"))
     return _format_result(
         {
@@ -154,6 +174,14 @@ async def _handle_connect(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_disconnect(args: dict[str, Any]) -> list[TextContent]:
+    """Disconnect from a spectrum analyzer.
+
+    Args:
+        args: host, port (defaults from settings).
+
+    Returns:
+        Whether the connection was closed.
+    """
     settings = get_settings()
     host = args.get("host", settings.default_host)
     port = args.get("port", settings.default_port)
@@ -162,11 +190,31 @@ async def _handle_disconnect(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_identify(args: dict[str, Any]) -> list[TextContent]:
+    """Get instrument identification.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Manufacturer, model, serial number, firmware version, vendor.
+
+    SCPI: *IDN?
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     return _format_result(sa.info.to_dict() if sa.info else {"error": "No info available"})
 
 
 async def _handle_get_status(args: dict[str, Any]) -> list[TextContent]:
+    """Get instrument connection and configuration status.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Current frequency, amplitude, bandwidth, and sweep settings.
+
+    SCPI: Multiple queries (FREQ:CENT?, FREQ:SPAN?, BAND?, etc.).
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     status = await sa.get_status()
     return _format_result(status)
