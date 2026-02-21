@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rs-spectrum-analyzer": {
+      "command": "uv",
+      "args": ["--directory", "/home/swamp/projects/github/mcp-rs-spectrum-analyzer", "run", "rs-spectrum-analyzer-mcp"]
+    }
+  }
+}
