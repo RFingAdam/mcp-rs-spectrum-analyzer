@@ -19,7 +19,7 @@ from ..models.sa_types import (
     TraceData,
     TraceMode,
 )
-from ..safety.validators import SafetyLimits, SafetyValidator
+from ..safety.validators import SafetyLimits, SafetyValidator, sanitize_scpi_param
 from .scpi_socket import SCPISocket
 
 logger = logging.getLogger(__name__)
@@ -532,6 +532,7 @@ class RSSpectrumAnalyzerDriver:
             source: Trigger source (IMM, EXT, VID, IFP, RFP)
             level: Trigger level (for video/IF power triggers)
         """
+        source = sanitize_scpi_param(source)
         await self._socket.send(f"TRIG:SOUR {source}")
         if level is not None and source in ("VID", "IFP"):
             await self._socket.send(f"TRIG:LEV {level}")

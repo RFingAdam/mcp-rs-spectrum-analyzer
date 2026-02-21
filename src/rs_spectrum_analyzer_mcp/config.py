@@ -51,6 +51,16 @@ class SASettings(BaseSettings):
         default=10e6, description="Maximum resolution bandwidth in Hz"
     )
 
+    # Security
+    allow_raw_scpi: bool = Field(
+        default=True,
+        description=(
+            "Allow raw SCPI command execution via sa_scpi_send/sa_scpi_query. "
+            "Set to False to disable raw SCPI access for hardened deployments. "
+            "Default: True for backwards compatibility."
+        ),
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Log level")
 

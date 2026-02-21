@@ -14,6 +14,7 @@ from .driver import RSSpectrumAnalyzerDriver
 from .exceptions import SpectrumAnalyzerError
 from .limits import LimitLine, LimitManager, LimitSegment
 from .models.sa_types import DetectorType, TraceMode
+from .safety.validators import sanitize_scpi_param, validate_safe_path
 from .state import InstrumentState, StateManager
 from .templates import (
     ACLRTemplate,
@@ -1340,7 +1341,7 @@ async def _handle_measure_sem(args: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_measure_evm(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
-    modulation = args.get("modulation", "QPSK")
+    modulation = sanitize_scpi_param(args.get("modulation", "QPSK"))
     # EVM requires digital demod option; send relevant SCPI
     await sa.scpi_send(f"SENS:DDEM:FORM {modulation}")
     await sa.single_sweep()
@@ -1403,13 +1404,8 @@ async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
 
-    filepath = Path(args["filepath"]).resolve()
-    # Prevent path traversal: ensure the resolved path stays under cwd
-    cwd = Path.cwd().resolve()
-    if not str(filepath).startswith(str(cwd)):
-        return _format_error(
-            ValueError(f"Path traversal denied: {filepath} is outside {cwd}")
-        )
+    # Issue 2: Validate path stays within cwd using proper path validation
+    filepath = validate_safe_path(args["filepath"], Path.cwd())
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -1431,8 +1427,10 @@ async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_save_screenshot(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
     filepath = args["filepath"]
-    # Sanitize single quotes to prevent SCPI command injection
-    safe_filepath = filepath.replace("'", "\\'")
+    # Sanitize to prevent SCPI command injection via metacharacters
+    safe_filepath = sanitize_scpi_param(filepath)
+    # Also escape single quotes for the SCPI string literal
+    safe_filepath = safe_filepath.replace("'", "\\'")
     # R&S instruments can save screenshots via SCPI
     await sa.scpi_send("HCOP:DEV:LANG PNG")
     await sa.scpi_send(f"MMEM:NAME '{safe_filepath}'")
@@ -1450,15 +1448,51 @@ async def _handle_export_trace_data(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_scpi_send(args: dict[str, Any]) -> list[TextContent]:
+    settings = get_settings()
+    command = args["command"]
+
+    # Issue 3: Check if raw SCPI is allowed
+    if not settings.allow_raw_scpi:
+        logger.warning(
+            "Raw SCPI send blocked (allow_raw_scpi=False): %s", command
+        )
+        return _format_error(
+            ValueError(
+                "Raw SCPI commands are disabled. "
+                "Set SA_ALLOW_RAW_SCPI=true to enable."
+            )
+        )
+
+    # Issue 3: Log WARNING on every raw SCPI execution
+    logger.warning("Raw SCPI send: %s", command)
+
     sa = await _get_sa(args.get("host"), args.get("port"))
-    await sa.scpi_send(args["command"])
-    return _format_result({"command": args["command"], "sent": True})
+    await sa.scpi_send(command)
+    return _format_result({"command": command, "sent": True})
 
 
 async def _handle_scpi_query(args: dict[str, Any]) -> list[TextContent]:
+    settings = get_settings()
+    command = args["command"]
+
+    # Issue 3: Check if raw SCPI is allowed
+    if not settings.allow_raw_scpi:
+        logger.warning(
+            "Raw SCPI query blocked (allow_raw_scpi=False): %s", command
+        )
+        return _format_error(
+            ValueError(
+                "Raw SCPI commands are disabled. "
+                "Set SA_ALLOW_RAW_SCPI=true to enable."
+            )
+        )
+
+    # Issue 3: Log WARNING on every raw SCPI execution
+    logger.warning("Raw SCPI query: %s", command)
+
     sa = await _get_sa(args.get("host"), args.get("port"))
-    response = await sa.scpi_query(args["command"])
-    return _format_result({"command": args["command"], "response": response})
+    response = await sa.scpi_query(command)
+    return _format_result({"command": command, "response": response})
 
 
 async def _handle_reset(args: dict[str, Any]) -> list[TextContent]:
@@ -1510,7 +1544,9 @@ async def _handle_load_template(args: dict[str, Any]) -> list[TextContent]:
     template_name = args.get("template_name")
 
     if filepath:
-        _current_template = MeasurementTemplate.load(filepath)
+        # Issue 2: Validate template filepath stays within cwd
+        safe_path = validate_safe_path(filepath, Path.cwd())
+        _current_template = MeasurementTemplate.load(safe_path)
     elif template_name:
         template_map = {
             "lte_10mhz_channel_power": lambda: ChannelPowerTemplate.lte_10mhz(),
@@ -1610,7 +1646,9 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
     if args.get("notes"):
         state.notes = args["notes"]
 
-    filepath = _state_manager.state_directory / f"{args['name']}.json"
+    # Issue 2: Validate path stays within state directory
+    state_dir = _state_manager.state_directory
+    filepath = validate_safe_path(f"{args['name']}.json", state_dir)
     state.save(filepath)
 
     return _format_result({
@@ -1622,7 +1660,10 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
-    filepath = _state_manager.state_directory / f"{args['name']}.json"
+
+    # Issue 2: Validate path stays within state directory
+    state_dir = _state_manager.state_directory
+    filepath = validate_safe_path(f"{args['name']}.json", state_dir)
 
     state = InstrumentState.load(filepath)
     await _state_manager.restore_state(sa, state)
