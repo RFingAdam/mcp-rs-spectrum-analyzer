@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from mcp.types import TextContent, Tool
@@ -47,8 +48,8 @@ def _get_connection_key(host: str, port: int) -> str:
 async def _get_sa(host: str | None = None, port: int | None = None) -> RSSpectrumAnalyzerDriver:
     """Get or create spectrum analyzer connection."""
     settings = get_settings()
-    host = host or settings.default_host
-    port = port or settings.default_port
+    host = host if host is not None else settings.default_host
+    port = port if port is not None else settings.default_port
     key = _get_connection_key(host, port)
 
     if key in _sa_connections:
@@ -1402,22 +1403,26 @@ async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
 
-    filepath = args["filepath"]
+    filepath = Path(args["filepath"]).resolve()
+    # Prevent path traversal: ensure the resolved path stays under cwd
+    cwd = Path.cwd().resolve()
+    if not str(filepath).startswith(str(cwd)):
+        return _format_error(
+            ValueError(f"Path traversal denied: {filepath} is outside {cwd}")
+        )
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Frequency_Hz", "Amplitude_dBm"])
     for freq, amp in zip(trace.frequencies, trace.amplitudes):
         writer.writerow([freq, amp])
 
-    from pathlib import Path
-
-    path = Path(filepath)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w", newline="") as f:
         f.write(output.getvalue())
 
     return _format_result({
-        "filepath": filepath,
+        "filepath": str(filepath),
         "num_points": trace.num_points,
         "saved": True,
     })
@@ -1426,9 +1431,11 @@ async def _handle_save_trace_csv(args: dict[str, Any]) -> list[TextContent]:
 async def _handle_save_screenshot(args: dict[str, Any]) -> list[TextContent]:
     sa = await _get_sa(args.get("host"), args.get("port"))
     filepath = args["filepath"]
+    # Sanitize single quotes to prevent SCPI command injection
+    safe_filepath = filepath.replace("'", "\\'")
     # R&S instruments can save screenshots via SCPI
     await sa.scpi_send("HCOP:DEV:LANG PNG")
-    await sa.scpi_send(f"MMEM:NAME '{filepath}'")
+    await sa.scpi_send(f"MMEM:NAME '{safe_filepath}'")
     await sa.scpi_send("HCOP:IMM")
     return _format_result({
         "filepath": filepath,
