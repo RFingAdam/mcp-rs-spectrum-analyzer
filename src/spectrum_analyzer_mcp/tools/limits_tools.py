@@ -94,6 +94,14 @@ def get_limit_tools() -> list[Tool]:
 
 
 async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
+    """Define a limit line with frequency segments and max/min thresholds.
+
+    Args:
+        args: name, segments (list of start/stop/max/min), description.
+
+    Returns:
+        Limit name and number of segments defined.
+    """
     segments = []
     for seg_data in args["segments"]:
         segments.append(
@@ -123,6 +131,16 @@ async def _handle_define_limit(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_check_limits(args: dict[str, Any]) -> list[TextContent]:
+    """Check current trace data against all defined limit lines.
+
+    Args:
+        args: trace_number (default 1), host, port.
+
+    Returns:
+        Overall pass/fail status and per-limit violation details.
+
+    SCPI: TRAC:DATA? TRACEn (to read trace for comparison).
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     trace = await sa.get_trace_data(args.get("trace_number", 1))
     async with _measurement_lock:
@@ -131,12 +149,28 @@ async def _handle_check_limits(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_clear_limits(args: dict[str, Any]) -> list[TextContent]:
+    """Clear all defined limit lines.
+
+    Args:
+        args: (none required).
+
+    Returns:
+        Confirmation that limits were cleared.
+    """
     async with _measurement_lock:
         _limit_manager.clear_limits()
     return _format_result({"limits_cleared": True})
 
 
 async def _handle_list_limits(args: dict[str, Any]) -> list[TextContent]:
+    """List all defined limit lines with their segments.
+
+    Args:
+        args: (none required).
+
+    Returns:
+        List of limits with names, descriptions, and segment details.
+    """
     async with _measurement_lock:
         names = _limit_manager.list_limits()
         limits_info = []

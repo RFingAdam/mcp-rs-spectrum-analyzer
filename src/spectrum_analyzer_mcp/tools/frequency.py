@@ -86,6 +86,16 @@ def get_frequency_tools() -> list[Tool]:
 
 
 async def _handle_set_center_span(args: dict[str, Any]) -> list[TextContent]:
+    """Set center frequency and span.
+
+    Args:
+        args: center_hz, span_hz, host, port.
+
+    Returns:
+        Confirmed center frequency and span values.
+
+    SCPI: SENS:FREQ:CENT, SENS:FREQ:SPAN.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_center_span(args["center_hz"], args["span_hz"])
     return _format_result(
@@ -97,6 +107,16 @@ async def _handle_set_center_span(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_start_stop(args: dict[str, Any]) -> list[TextContent]:
+    """Set start and stop frequencies.
+
+    Args:
+        args: start_hz, stop_hz, host, port.
+
+    Returns:
+        Confirmed start and stop frequency values.
+
+    SCPI: SENS:FREQ:STAR, SENS:FREQ:STOP.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_start_stop(args["start_hz"], args["stop_hz"])
     return _format_result(
@@ -108,12 +128,32 @@ async def _handle_set_start_stop(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_frequency_step(args: dict[str, Any]) -> list[TextContent]:
+    """Set frequency step size for manual tuning.
+
+    Args:
+        args: step_hz, host, port.
+
+    Returns:
+        Confirmed frequency step value.
+
+    SCPI: SENS:FREQ:CENT:STEP.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_frequency_step(args["step_hz"])
     return _format_result({"frequency_step_hz": args["step_hz"]})
 
 
 async def _handle_full_span(args: dict[str, Any]) -> list[TextContent]:
+    """Set analyzer to full span (maximum frequency range).
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Confirmation that full span was set.
+
+    SCPI: SENS:FREQ:SPAN:FULL.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.full_span()
     return _format_result({"full_span": True})

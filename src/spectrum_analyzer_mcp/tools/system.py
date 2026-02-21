@@ -101,6 +101,16 @@ def get_system_tools() -> list[Tool]:
 
 
 async def _handle_get_error_queue(args: dict[str, Any]) -> list[TextContent]:
+    """Read all errors from the instrument error queue.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Error count, list of error strings, and queue_empty flag.
+
+    SCPI: SYST:ERR? (looped until '0,"No error"').
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     errors = await sa.get_error_queue()
     return _format_result(
@@ -113,6 +123,16 @@ async def _handle_get_error_queue(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_display_update(args: dict[str, Any]) -> list[TextContent]:
+    """Enable or disable instrument display updates.
+
+    Args:
+        args: enabled (bool), host, port.
+
+    Returns:
+        Confirmed display update state.
+
+    SCPI: SYST:DISP:UPD ON|OFF.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     enabled = args["enabled"]
     await sa.set_display_update(enabled)
@@ -120,6 +140,16 @@ async def _handle_set_display_update(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_run_alignment(args: dict[str, Any]) -> list[TextContent]:
+    """Run internal self-alignment/calibration.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Alignment result (passed or check_required) and raw response.
+
+    SCPI: CAL:ALL? (may take several minutes).
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     result = await sa.run_alignment()
     passed = result.strip() == "0"
@@ -132,6 +162,16 @@ async def _handle_run_alignment(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_set_sweep_points(args: dict[str, Any]) -> list[TextContent]:
+    """Set the number of sweep trace points.
+
+    Args:
+        args: points (integer, e.g. 1001, 8192), host, port.
+
+    Returns:
+        Confirmed sweep point count.
+
+    SCPI: SENS:SWE:POIN.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     points = args["points"]
     await sa.set_sweep_points(points)
@@ -139,12 +179,32 @@ async def _handle_set_sweep_points(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_get_sweep_points(args: dict[str, Any]) -> list[TextContent]:
+    """Get the current number of sweep trace points.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Current sweep point count.
+
+    SCPI: SENS:SWE:POIN?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     points = await sa.get_sweep_points()
     return _format_result({"sweep_points": points})
 
 
 async def _handle_capture_screenshot(args: dict[str, Any]) -> list[TextContent]:
+    """Capture instrument screenshot and return as base64-encoded image.
+
+    Args:
+        args: format (PNG|BMP|JPG, default PNG), host, port.
+
+    Returns:
+        Image format, size in bytes, and base64-encoded image data.
+
+    SCPI: HCOP:DEV:LANG, MMEM:DATA?.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     fmt = args.get("format", "PNG")
     data = await sa.capture_screenshot(fmt)

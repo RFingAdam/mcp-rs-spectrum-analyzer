@@ -78,24 +78,64 @@ def get_bandwidth_tools() -> list[Tool]:
 
 
 async def _handle_set_rbw(args: dict[str, Any]) -> list[TextContent]:
+    """Set resolution bandwidth (RBW).
+
+    Args:
+        args: rbw_hz, host, port.
+
+    Returns:
+        Confirmed RBW value in Hz.
+
+    SCPI: SENS:BAND:RES.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_rbw(args["rbw_hz"])
     return _format_result({"rbw_hz": args["rbw_hz"]})
 
 
 async def _handle_set_vbw(args: dict[str, Any]) -> list[TextContent]:
+    """Set video bandwidth (VBW).
+
+    Args:
+        args: vbw_hz, host, port.
+
+    Returns:
+        Confirmed VBW value in Hz.
+
+    SCPI: SENS:BAND:VID.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_vbw(args["vbw_hz"])
     return _format_result({"vbw_hz": args["vbw_hz"]})
 
 
 async def _handle_set_sweep_time(args: dict[str, Any]) -> list[TextContent]:
+    """Set sweep time.
+
+    Args:
+        args: time_s (seconds), host, port.
+
+    Returns:
+        Confirmed sweep time in seconds.
+
+    SCPI: SENS:SWE:TIME.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_sweep_time(args["time_s"])
     return _format_result({"sweep_time_s": args["time_s"]})
 
 
 async def _handle_auto_coupling(args: dict[str, Any]) -> list[TextContent]:
+    """Enable auto-coupling for RBW, VBW, and sweep time.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Confirmation that auto-coupling was enabled.
+
+    SCPI: SENS:BAND:RES:AUTO ON, SENS:BAND:VID:AUTO ON, SENS:SWE:TIME:AUTO ON.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.auto_coupling()
     return _format_result({"auto_coupling": True})

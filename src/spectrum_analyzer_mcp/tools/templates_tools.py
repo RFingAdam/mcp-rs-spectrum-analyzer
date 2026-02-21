@@ -73,6 +73,14 @@ def get_template_tools() -> list[Tool]:
 
 
 async def _handle_list_templates(args: dict[str, Any]) -> list[TextContent]:
+    """List all available built-in measurement templates.
+
+    Args:
+        args: (none required).
+
+    Returns:
+        Dict of template categories with template names and descriptions.
+    """
     templates = {
         "channel_power": {
             "lte_10mhz_channel_power": "LTE 10 MHz channel power measurement",
@@ -103,6 +111,14 @@ async def _handle_list_templates(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_load_template(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
+    """Load a measurement template by name or from a JSON file.
+
+    Args:
+        args: template_name (built-in name) or filepath (JSON file path).
+
+    Returns:
+        Template summary (name, description, configuration).
+    """
     global _current_template
 
     filepath = args.get("filepath")
@@ -141,6 +157,16 @@ async def _handle_load_template(args: dict[str, Any]) -> list[TextContent] | Cal
 
 
 async def _handle_apply_template(args: dict[str, Any]) -> list[TextContent] | CallToolResult:
+    """Apply the currently loaded template to the instrument.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Applied template name and configuration.
+
+    SCPI: Varies by template (frequency, bandwidth, detector settings).
+    """
     global _current_template
     async with _template_lock:
         if _current_template is None:

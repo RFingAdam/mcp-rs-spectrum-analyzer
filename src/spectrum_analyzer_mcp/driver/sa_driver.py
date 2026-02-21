@@ -3,6 +3,13 @@
 import logging
 from enum import Enum
 
+try:
+    import numpy as np
+
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+
 from ..exceptions import (
     ConfigurationError,
     MeasurementError,
@@ -413,11 +420,14 @@ class RSSpectrumAnalyzerDriver:
         # Get trace data (comma-separated amplitude values)
         amplitudes = await self._socket.query_float_list(f"TRAC:DATA? TRACE{trace_number}")
 
-        # Build frequency array
+        # Build frequency array (numpy for large traces, list comp for small)
         num_points = len(amplitudes)
         if num_points > 1:
-            step = (stop - start) / (num_points - 1)
-            frequencies = [start + i * step for i in range(num_points)]
+            if HAS_NUMPY and num_points > 10000:
+                frequencies = np.linspace(start, stop, num_points).tolist()
+            else:
+                step = (stop - start) / (num_points - 1)
+                frequencies = [start + i * step for i in range(num_points)]
         elif num_points == 1:
             frequencies = [start]
         else:

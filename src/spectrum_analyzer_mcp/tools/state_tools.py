@@ -71,6 +71,16 @@ def get_state_tools() -> list[Tool]:
 
 
 async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
+    """Save current instrument state to a JSON file.
+
+    Args:
+        args: name (state filename), notes (optional), host, port.
+
+    Returns:
+        State name, filepath, and configuration summary.
+
+    SCPI: Multiple queries to capture all instrument settings.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     state = await _state_manager.capture_state(sa)
 
@@ -91,6 +101,16 @@ async def _handle_save_state(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
+    """Load and restore instrument state from a JSON file.
+
+    Args:
+        args: name (state filename), host, port.
+
+    Returns:
+        State name and configuration summary. Rolls back on failure.
+
+    SCPI: Multiple commands to restore all instrument settings.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
 
     state_dir = _state_manager.state_directory
@@ -108,6 +128,16 @@ async def _handle_load_state(args: dict[str, Any]) -> list[TextContent]:
 
 
 async def _handle_get_full_state(args: dict[str, Any]) -> list[TextContent]:
+    """Get complete current instrument configuration.
+
+    Args:
+        args: host, port.
+
+    Returns:
+        Full instrument state (frequency, amplitude, bandwidth, trace, markers).
+
+    SCPI: Multiple queries to read all instrument settings.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     state = await _state_manager.capture_state(sa)
     return _format_result(state.to_dict())

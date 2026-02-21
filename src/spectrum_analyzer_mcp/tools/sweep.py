@@ -74,18 +74,48 @@ def get_sweep_tools() -> list[Tool]:
 
 
 async def _handle_single_sweep(args: dict[str, Any]) -> list[TextContent]:
+    """Trigger a single sweep and wait for completion.
+
+    Args:
+        args: timeout (seconds), host, port.
+
+    Returns:
+        Confirmation that sweep completed.
+
+    SCPI: INIT:CONT OFF, INIT;*WAI.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.single_sweep(args.get("timeout"))
     return _format_result({"sweep_complete": True})
 
 
 async def _handle_continuous_sweep(args: dict[str, Any]) -> list[TextContent]:
+    """Enable or disable continuous sweep mode.
+
+    Args:
+        args: enabled (bool, default True), host, port.
+
+    Returns:
+        Confirmed continuous sweep state.
+
+    SCPI: INIT:CONT ON|OFF.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.continuous_sweep(args.get("enabled", True))
     return _format_result({"continuous_sweep": args.get("enabled", True)})
 
 
 async def _handle_set_trigger(args: dict[str, Any]) -> list[TextContent]:
+    """Configure trigger source and level.
+
+    Args:
+        args: source (IMM|EXT|VID|IFP|RFP), level (for video/IF triggers), host, port.
+
+    Returns:
+        Confirmed trigger source.
+
+    SCPI: TRIG:SOUR, TRIG:LEV.
+    """
     sa = await _get_sa(args.get("host"), args.get("port"))
     await sa.set_trigger(args["source"], args.get("level"))
     return _format_result({"trigger_source": args["source"]})
