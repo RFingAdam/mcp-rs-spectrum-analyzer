@@ -185,8 +185,35 @@ class SCPISocket:
             TimeoutError: If response times out
             CommunicationError: If communication fails
         """
-        await self.send(command)
-        return await self.read_response(timeout)
+        if not self.is_connected:
+            raise ConnectionError("Not connected to spectrum analyzer", self.address)
+
+        timeout = timeout or self.command_timeout
+
+        async with self._lock:
+            try:
+                if not command.endswith(self.TERMINATOR):
+                    command += self.TERMINATOR
+                self._writer.write(command.encode())
+                await self._writer.drain()
+                logger.debug(f"Sent: {command.strip()}")
+            except Exception as e:
+                self._connected = False
+                raise CommunicationError(f"Failed to send command: {e}", self.address)
+
+            try:
+                data = await asyncio.wait_for(
+                    self._reader.readline(),
+                    timeout=timeout,
+                )
+                response = data.decode().strip()
+                logger.debug(f"Received: {response[:100]}...")
+                return response
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Read timed out after {timeout}s", self.address)
+            except Exception as e:
+                self._connected = False
+                raise CommunicationError(f"Failed to read response: {e}", self.address)
 
     async def query_binary(
         self,
