@@ -2,6 +2,7 @@
 
 from .sa_types import (
     ACLRResult,
+    BandwidthResult,
     ChannelPowerResult,
     DetectorType,
     InstrumentInfo,
@@ -16,6 +17,7 @@ from .sa_types import (
 
 __all__ = [
     "ACLRResult",
+    "BandwidthResult",
     "ChannelPowerResult",
     "DetectorType",
     "InstrumentInfo",
