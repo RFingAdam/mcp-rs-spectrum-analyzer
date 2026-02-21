@@ -57,12 +57,13 @@ class TraceMode(Enum):
 class DetectorType(Enum):
     """Detector types for spectrum analysis."""
 
-    POSITIVE_PEAK = "POS"  # Positive peak
+    PEAK = "POS"  # Positive peak
     RMS = "RMS"  # RMS
     AVERAGE = "AVER"  # Average (voltage)
     SAMPLE = "SAMP"  # Sample
     QUASI_PEAK = "QPE"  # Quasi-peak (EMI)
     NEGATIVE_PEAK = "NEG"  # Negative peak
+    CISPR_AVERAGE = "CAV"  # CISPR average (EMI)
 
 
 class TriggerSource(Enum):
@@ -312,3 +313,30 @@ class OBWResult:
             "lower_frequency_hz": self.lower_frequency_hz,
             "upper_frequency_hz": self.upper_frequency_hz,
         }
+
+
+@dataclass
+class BandwidthResult:
+    """N-dB bandwidth measurement result."""
+
+    bandwidth_hz: float
+    center_frequency_hz: float
+    n_db: float = 3.0
+    lower_frequency_hz: float | None = None
+    upper_frequency_hz: float | None = None
+    quality_factor: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {
+            "bandwidth_hz": self.bandwidth_hz,
+            "center_frequency_hz": self.center_frequency_hz,
+            "n_db": self.n_db,
+        }
+        if self.lower_frequency_hz is not None:
+            result["lower_frequency_hz"] = self.lower_frequency_hz
+        if self.upper_frequency_hz is not None:
+            result["upper_frequency_hz"] = self.upper_frequency_hz
+        if self.quality_factor is not None:
+            result["quality_factor"] = self.quality_factor
+        return result

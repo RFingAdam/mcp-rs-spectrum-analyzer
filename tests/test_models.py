@@ -3,6 +3,7 @@
 
 from rs_spectrum_analyzer_mcp.models.sa_types import (
     ACLRResult,
+    BandwidthResult,
     ChannelPowerResult,
     DetectorType,
     InstrumentInfo,
@@ -48,8 +49,8 @@ class TestTraceMode:
 class TestDetectorType:
     """Test DetectorType enum values."""
 
-    def test_positive_peak(self):
-        assert DetectorType.POSITIVE_PEAK.value == "POS"
+    def test_peak(self):
+        assert DetectorType.PEAK.value == "POS"
 
     def test_rms(self):
         assert DetectorType.RMS.value == "RMS"
@@ -59,6 +60,9 @@ class TestDetectorType:
 
     def test_sample(self):
         assert DetectorType.SAMPLE.value == "SAMP"
+
+    def test_cispr_average(self):
+        assert DetectorType.CISPR_AVERAGE.value == "CAV"
 
 
 class TestInstrumentInfo:
@@ -246,3 +250,63 @@ class TestOBWResult:
         d = result.to_dict()
         assert d["occupied_bandwidth_hz"] == 9.5e6
         assert d["power_percentage"] == 99.0
+
+
+class TestBandwidthResult:
+    """Test BandwidthResult model."""
+
+    def test_basic_bandwidth(self):
+        result = BandwidthResult(
+            bandwidth_hz=1e6,
+            center_frequency_hz=1e9,
+        )
+        assert result.bandwidth_hz == 1e6
+        assert result.center_frequency_hz == 1e9
+        assert result.n_db == 3.0
+        assert result.lower_frequency_hz is None
+        assert result.upper_frequency_hz is None
+        assert result.quality_factor is None
+
+    def test_full_bandwidth(self):
+        result = BandwidthResult(
+            bandwidth_hz=2e6,
+            center_frequency_hz=1e9,
+            n_db=6.0,
+            lower_frequency_hz=999e6,
+            upper_frequency_hz=1001e6,
+            quality_factor=500.0,
+        )
+        assert result.n_db == 6.0
+        assert result.lower_frequency_hz == 999e6
+        assert result.upper_frequency_hz == 1001e6
+        assert result.quality_factor == 500.0
+
+    def test_to_dict_minimal(self):
+        result = BandwidthResult(
+            bandwidth_hz=1e6,
+            center_frequency_hz=1e9,
+        )
+        d = result.to_dict()
+        assert d["bandwidth_hz"] == 1e6
+        assert d["center_frequency_hz"] == 1e9
+        assert d["n_db"] == 3.0
+        assert "lower_frequency_hz" not in d
+        assert "upper_frequency_hz" not in d
+        assert "quality_factor" not in d
+
+    def test_to_dict_full(self):
+        result = BandwidthResult(
+            bandwidth_hz=2e6,
+            center_frequency_hz=1e9,
+            n_db=6.0,
+            lower_frequency_hz=999e6,
+            upper_frequency_hz=1001e6,
+            quality_factor=500.0,
+        )
+        d = result.to_dict()
+        assert d["bandwidth_hz"] == 2e6
+        assert d["center_frequency_hz"] == 1e9
+        assert d["n_db"] == 6.0
+        assert d["lower_frequency_hz"] == 999e6
+        assert d["upper_frequency_hz"] == 1001e6
+        assert d["quality_factor"] == 500.0

@@ -26,6 +26,9 @@ class TestSASettings:
         assert isinstance(limits, SafetyLimits)
         assert limits.max_input_power_dbm == 30.0
         assert limits.max_frequency_hz == 90e9
+        assert limits.min_rbw_hz == 1.0
+        assert limits.max_rbw_hz == 10e6
+        assert limits.min_attenuation_db == 0.0
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("SA_DEFAULT_HOST", "10.0.0.1")

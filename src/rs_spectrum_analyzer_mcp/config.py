@@ -41,6 +41,15 @@ class SASettings(BaseSettings):
     max_attenuation_db: float = Field(
         default=75.0, description="Maximum attenuation in dB"
     )
+    min_attenuation_db: float = Field(
+        default=0.0, description="Minimum attenuation in dB"
+    )
+    min_rbw_hz: float = Field(
+        default=1.0, description="Minimum resolution bandwidth in Hz"
+    )
+    max_rbw_hz: float = Field(
+        default=10e6, description="Maximum resolution bandwidth in Hz"
+    )
 
     # Logging
     log_level: str = Field(default="INFO", description="Log level")
@@ -52,6 +61,9 @@ class SASettings(BaseSettings):
             max_frequency_hz=self.max_frequency_hz,
             min_frequency_hz=self.min_frequency_hz,
             max_attenuation_db=self.max_attenuation_db,
+            min_attenuation_db=self.min_attenuation_db,
+            min_rbw_hz=self.min_rbw_hz,
+            max_rbw_hz=self.max_rbw_hz,
         )
 
     def configure_logging(self) -> None:
