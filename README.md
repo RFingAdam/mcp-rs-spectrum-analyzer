@@ -22,6 +22,13 @@
 
 ---
 
+> [!IMPORTANT]
+> **Hardware required.** This MCP server controls real spectrum analyzers
+> over SCPI (TCP or VISA). You need actual R&S **FSW / FSVA / FSV / FPL**
+> hardware (or a supported Keysight / Rigol / Siglent analyzer) on the
+> network or USB-connected to be useful. The server has no built-in
+> simulator — it's a thin driver, not a virtual instrument.
+
 ## What is mcp-rs-spectrum-analyzer?
 
 `mcp-rs-spectrum-analyzer` is a [Model Context Protocol](https://modelcontextprotocol.io)
