@@ -5,7 +5,7 @@
 <br/>
 
 [![CI](https://github.com/RFingAdam/mcp-rs-spectrum-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/RFingAdam/mcp-rs-spectrum-analyzer/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-Apache--2.0-1E40AF.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-1E40AF.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-server-A78BFA.svg)](https://modelcontextprotocol.io)
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
@@ -53,8 +53,8 @@ Siglent (SSA3000X/SVA1000X), Anritsu (MS2760/MS2090), and Tektronix
   for GPIB / USB-TMC / HiSLIP.
 - ✅ **Pre-built measurement templates.** Channel power, ACLR, OBW, EMI
   (CISPR 32 Class B), harmonics, spurious.
-- 🔒 **Apache-2.0.** SCPI-injection-guarded, path-traversal-protected, raw-SCPI
-  disable flag.
+- 🔒 **AGPL-3.0-or-later.** SCPI-injection-guarded, path-traversal-protected,
+  raw-SCPI disable flag.
 
 ---
 
@@ -286,7 +286,8 @@ uv run mypy src/
 
 ## License
 
-[Apache-2.0](LICENSE).
+[AGPL-3.0-or-later](LICENSE). Relicensed from Apache-2.0 in v0.3.0 to
+align with the eng-mcp-suite toolkit-wide AGPL move.
 
 ## Acknowledgments
 
