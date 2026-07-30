@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from scpi_core import Idempotency
 
 from spectrum_analyzer_mcp.driver.sa_driver import (
     ConnectionState,
@@ -105,7 +106,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_center_frequency(1e9)
-        mock_socket.send.assert_called_with("SENS:FREQ:CENT 1000000000.0")
+        mock_socket.send.assert_called_with(
+            "SENS:FREQ:CENT 1000000000.0", idempotency=Idempotency.SETTING
+        )
 
     @pytest.mark.asyncio
     async def test_set_center_frequency_too_high(self):
@@ -126,7 +129,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_span(100e6)
-        mock_socket.send.assert_called_with("SENS:FREQ:SPAN 100000000.0")
+        mock_socket.send.assert_called_with(
+            "SENS:FREQ:SPAN 100000000.0", idempotency=Idempotency.SETTING
+        )
 
     @pytest.mark.asyncio
     async def test_set_span_negative_raises(self):
@@ -147,7 +152,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_reference_level(-20.0)
-        mock_socket.send.assert_called_with("DISP:TRAC:Y:RLEV -20.0")
+        mock_socket.send.assert_called_with(
+            "DISP:TRAC:Y:RLEV -20.0", idempotency=Idempotency.SETTING
+        )
 
     @pytest.mark.asyncio
     async def test_set_attenuation(self):
@@ -158,7 +165,7 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_attenuation(20.0)
-        mock_socket.send.assert_called_with("INP:ATT 20.0")
+        mock_socket.send.assert_called_with("INP:ATT 20.0", idempotency=Idempotency.SETTING)
 
     @pytest.mark.asyncio
     async def test_set_attenuation_too_high(self):
@@ -191,7 +198,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_preamp(True)
-        mock_socket.send.assert_called_with("INP:GAIN:STAT ON")
+        mock_socket.send.assert_called_with(
+            "INP:GAIN:STAT ON", idempotency=Idempotency.SETTING
+        )
 
     @pytest.mark.asyncio
     async def test_single_sweep(self):
@@ -237,7 +246,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_trace_mode(TraceMode.MAX_HOLD)
-        mock_socket.send.assert_called_with("DISP:TRAC1:MODE MAXHold")
+        mock_socket.send.assert_called_with(
+            "DISP:TRAC1:MODE MAXHold", idempotency=Idempotency.SETTING
+        )
 
     @pytest.mark.asyncio
     async def test_set_detector(self):
@@ -248,7 +259,7 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_detector(DetectorType.QUASI_PEAK)
-        mock_socket.send.assert_called_with("SENS:DET1 QPE")
+        mock_socket.send.assert_called_with("SENS:DET1 QPE", idempotency=Idempotency.SETTING)
 
     @pytest.mark.asyncio
     async def test_peak_search(self):
@@ -278,7 +289,9 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.reset()
-        mock_socket.send.assert_called_with("*RST")
+        # *RST is a state transition: a duplicate would wipe settings the caller
+        # applied after the first one landed, so it must never be retried.
+        mock_socket.send.assert_called_with("*RST", idempotency=Idempotency.ACTION)
 
     @pytest.mark.asyncio
     async def test_auto_coupling(self):

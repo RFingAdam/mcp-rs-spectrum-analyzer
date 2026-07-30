@@ -5,13 +5,14 @@ import json
 
 import pytest
 from mcp.types import CallToolResult
+from scpi_core import ConnectionRegistry
 
 from spectrum_analyzer_mcp.tools import (
     _ALL_HANDLERS as _TOOL_HANDLERS,
 )
 from spectrum_analyzer_mcp.tools import (
-    _connection_lock,
     _measurement_lock,
+    _sa_registry,
     _template_lock,
     get_tools,
     handle_tool,
@@ -307,8 +308,11 @@ class TestIsErrorFlag:
 class TestAsyncioLocks:
     """Issue 4: Verify asyncio.Lock instances exist and are proper Lock objects."""
 
-    def test_connection_lock_exists(self):
-        assert isinstance(_connection_lock, asyncio.Lock)
+    def test_connection_registry_exists(self):
+        # Connection state used to be a bare dict guarded by an asyncio.Lock in
+        # tools._connection. ConnectionRegistry owns both now, so the property
+        # under test moved with it: something serializes access to live handles.
+        assert isinstance(_sa_registry, ConnectionRegistry)
 
     def test_template_lock_exists(self):
         assert isinstance(_template_lock, asyncio.Lock)
@@ -319,7 +323,9 @@ class TestAsyncioLocks:
     @pytest.mark.asyncio
     async def test_locks_are_reentrant_safe(self):
         """Locks should not be held when we check, meaning they can be acquired."""
-        assert not _connection_lock.locked()
+        # The registry's lock is task-reentrant rather than an asyncio.Lock, so
+        # "not held" is a nesting depth of zero.
+        assert _sa_registry._lock.depth == 0
         assert not _template_lock.locked()
         assert not _measurement_lock.locked()
 

@@ -1,13 +1,10 @@
-"""Async TCP/IP SCPI transport (backward-compatible wrapper).
+"""Backward-compatible import path for the raw-socket transport.
 
-This module re-exports ``TCPSocketTransport`` as ``SCPISocket`` for
-backward compatibility. New code should import from
-``spectrum_analyzer_mcp.transport`` instead.
+``SCPISocket`` used to be a local alias here; it is now the real class name in
+``scpi_core.transport``. New code should import from
+``spectrum_analyzer_mcp.transport``.
 """
 
-from ..transport.tcp_socket import TCPSocketTransport
-
-# Backward-compatible alias
-SCPISocket = TCPSocketTransport
+from ..transport import SCPISocket
 
 __all__ = ["SCPISocket"]

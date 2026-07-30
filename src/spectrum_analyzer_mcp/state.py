@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from scpi_core import Idempotency
+
 from .exceptions import SpectrumAnalyzerError
 
 logger = logging.getLogger(__name__)
@@ -419,38 +421,55 @@ class StateManager:
         Raises:
             SpectrumAnalyzerError: If any SCPI command fails
         """
+        # Every write here is a plain assignment replayed from a saved snapshot,
+        # so a transport-level retry re-applies the same value. Saying so lets
+        # the transport retry a restore that would otherwise abort halfway and
+        # leave the analyzer in a state that is neither the old one nor the new.
+        setting = Idempotency.SETTING
+
         # Restore frequency
-        await sa.scpi_send(f"SENS:FREQ:CENT {state.frequency.center_frequency_hz}")
-        await sa.scpi_send(f"SENS:FREQ:SPAN {state.frequency.span_hz}")
+        await sa.scpi_send(
+            f"SENS:FREQ:CENT {state.frequency.center_frequency_hz}", idempotency=setting
+        )
+        await sa.scpi_send(f"SENS:FREQ:SPAN {state.frequency.span_hz}", idempotency=setting)
 
         # Restore amplitude
-        await sa.scpi_send(f"DISP:TRAC:Y:RLEV {state.amplitude.reference_level_dbm}")
-        await sa.scpi_send(f"INP:ATT {state.amplitude.attenuation_db}")
+        await sa.scpi_send(
+            f"DISP:TRAC:Y:RLEV {state.amplitude.reference_level_dbm}", idempotency=setting
+        )
+        await sa.scpi_send(f"INP:ATT {state.amplitude.attenuation_db}", idempotency=setting)
         preamp_state = "ON" if state.amplitude.preamp_enabled else "OFF"
-        await sa.scpi_send(f"INP:GAIN:STAT {preamp_state}")
+        await sa.scpi_send(f"INP:GAIN:STAT {preamp_state}", idempotency=setting)
 
         # Restore bandwidth
-        await sa.scpi_send(f"SENS:BAND:RES {state.bandwidth.rbw_hz}")
-        await sa.scpi_send(f"SENS:BAND:VID {state.bandwidth.vbw_hz}")
-        await sa.scpi_send(f"SENS:SWE:TIME {state.bandwidth.sweep_time_s}")
+        await sa.scpi_send(f"SENS:BAND:RES {state.bandwidth.rbw_hz}", idempotency=setting)
+        await sa.scpi_send(f"SENS:BAND:VID {state.bandwidth.vbw_hz}", idempotency=setting)
+        await sa.scpi_send(f"SENS:SWE:TIME {state.bandwidth.sweep_time_s}", idempotency=setting)
 
         # Restore trace mode
-        await sa.scpi_send(f"DISP:TRAC1:MODE {state.trace_mode}")
+        await sa.scpi_send(f"DISP:TRAC1:MODE {state.trace_mode}", idempotency=setting)
 
         # Restore averaging
         if state.averaging_count > 1:
-            await sa.scpi_send("SENS:AVER:STAT ON")
-            await sa.scpi_send(f"SENS:AVER:COUN {state.averaging_count}")
+            await sa.scpi_send("SENS:AVER:STAT ON", idempotency=setting)
+            await sa.scpi_send(f"SENS:AVER:COUN {state.averaging_count}", idempotency=setting)
         else:
-            await sa.scpi_send("SENS:AVER:STAT OFF")
+            await sa.scpi_send("SENS:AVER:STAT OFF", idempotency=setting)
 
         # Restore markers
         for marker in state.markers:
             if marker.enabled and marker.frequency_hz is not None:
-                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT ON")
-                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:X {marker.frequency_hz}")
+                await sa.scpi_send(
+                    f"CALC:MARK{marker.marker_number}:STAT ON", idempotency=setting
+                )
+                await sa.scpi_send(
+                    f"CALC:MARK{marker.marker_number}:X {marker.frequency_hz}",
+                    idempotency=setting,
+                )
             else:
-                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT OFF")
+                await sa.scpi_send(
+                    f"CALC:MARK{marker.marker_number}:STAT OFF", idempotency=setting
+                )
 
     def list_saved_states(self) -> list[dict[str, Any]]:
         """List all saved state files."""

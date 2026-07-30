@@ -14,7 +14,9 @@ result parsing; a common SCPI core also covers Keysight, Rigol, Siglent,
 Anritsu, and Tektronix analyzers (~95% command-set overlap).
 
 Transport is either raw TCP/IP socket (no VISA install needed) or PyVISA for
-GPIB / USB-TMC / HiSLIP.
+GPIB / USB-TMC / HiSLIP. Both come from
+[`scpi-core`](https://github.com/RFingAdam/scpi-core), shared with the sibling
+R&S servers.
 
 ## Install
 
@@ -22,7 +24,18 @@ GPIB / USB-TMC / HiSLIP.
 uv pip install -e .
 # Optional: VISA support for GPIB/USB/HiSLIP
 uv pip install -e ".[visa]"
+# Optional: the offline simulator
+uv pip install -e ".[sim]"
 ```
+
+## No hardware to hand
+
+```bash
+spectrum-simulator                     # SCPI on 127.0.0.1:5025
+spectrum-simulator --list-unverified   # nodes not yet confirmed on hardware
+```
+
+It answers commands; it does not measure anything.
 
 ## First call
 

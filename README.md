@@ -23,11 +23,13 @@
 ---
 
 > [!IMPORTANT]
-> **Hardware required.** This MCP server controls real spectrum analyzers
-> over SCPI (TCP or VISA). You need actual R&S **FSW / FSVA / FSV / FPL**
-> hardware (or a supported Keysight / Rigol / Siglent analyzer) on the
-> network or USB-connected to be useful. The server has no built-in
-> simulator — it's a thin driver, not a virtual instrument.
+> **Hardware required for real measurements.** This MCP server controls real
+> spectrum analyzers over SCPI (TCP or VISA). You need actual R&S **FSW / FSVA /
+> FSV / FPL** hardware (or a supported Keysight / Rigol / Siglent analyzer) on
+> the network or USB-connected to measure anything. For development and offline
+> work there is now a simulator — `spectrum-simulator` serves a SCPI command
+> table on port 5025 so the tools can be exercised with no bench attached. It
+> produces synthetic values: anything measured against it is measuring nothing.
 
 ## What is mcp-rs-spectrum-analyzer?
 
@@ -49,8 +51,15 @@ Siglent (SSA3000X/SVA1000X), Anritsu (MS2760/MS2090), and Tektronix
   server with 62 tools across 14 categories. Any Claude / LLM agent can drive it.
 - 🐍 **Python + MCP surfaces.** Direct driver access via `import spectrum_analyzer_mcp`,
   or run as an MCP server for AI-agent automation.
-- ⚡ **Two transports.** Raw TCP/IP sockets (no VISA install needed) or PyVISA
-  for GPIB / USB-TMC / HiSLIP.
+- ⚡ **Two transports, shared with the sibling R&S servers.** Raw TCP/IP sockets
+  (no VISA install needed) or PyVISA for GPIB / USB-TMC / HiSLIP, both from
+  [`scpi-core`](https://github.com/RFingAdam/scpi-core). The socket transport
+  holds each query's send and read under one lock and refuses a stream a
+  timed-out read may have left offset — the failure mode that otherwise returns
+  the *previous* answer with no error.
+- 🧪 **Offline simulator.** `spectrum-simulator` plus fault injection
+  (`--drop-responses`, `--slow-response-ms`, `--close-after`) so timeout and
+  desync handling can be exercised deliberately.
 - ✅ **Pre-built measurement templates.** Channel power, ACLR, OBW, EMI
   (CISPR 32 Class B), harmonics, spurious.
 - 🔒 **AGPL-3.0-or-later.** SCPI-injection-guarded, path-traversal-protected,
@@ -67,6 +76,16 @@ uv pip install -e .
 
 # Optional: VISA support for GPIB/USB/HiSLIP
 uv pip install -e ".[visa]"
+
+# Optional: the offline simulator
+uv pip install -e ".[sim]"
+```
+
+### Run without hardware
+
+```bash
+spectrum-simulator                     # listens on 127.0.0.1:5025
+spectrum-simulator --list-unverified   # nodes not yet confirmed on hardware
 ```
 
 ### Configure
@@ -216,8 +235,9 @@ Built-in templates: `channel_power`, `aclr`, `obw`, `emi` (CISPR 32 Class B),
   configured safe directories.
 - **Raw SCPI guard** — `sa_scpi_send` / `sa_scpi_query` can be disabled via
   `SA_RAW_SCPI_ENABLED=false`.
-- **Asyncio locks** — concurrent tool calls serialized per resource
-  (connection, measurement, template).
+- **Serialized shared state** — measurement, template and state each hold their
+  own asyncio lock; live analyzer connections are held by a shared connection
+  registry with an idle TTL and a single eviction path.
 - **State rollback** — failed state restore operations automatically roll
   back to the previous state.
 

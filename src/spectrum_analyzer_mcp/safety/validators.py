@@ -1,9 +1,29 @@
-"""Safety validators for spectrum analyzer parameters."""
+"""Safety validators for spectrum analyzer parameters.
+
+``sanitize_scpi_param`` and ``validate_safe_path`` are adapters over
+:mod:`scpi_core.safety`. The logic moved; the wording did not. Each of the three
+R&S servers phrases these refusals differently and each test suite pins its own
+phrasing, so the shared helpers report *which rule* fired as data on a
+structured exception and every server renders its own message from it. Unifying
+the text would have silently changed a user-facing contract in three places at
+once.
+
+The numeric ``SafetyLimits`` / ``SafetyValidator`` below stay local: the limits
+are properties of a spectrum analyzer's input stage, not of SCPI.
+"""
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from scpi_core.safety import (
+    PathRule,
+    ScpiParamError,
+    ScpiParamRule,
+    UnsafePathError,
+    check_safe_path,
+    check_scpi_param,
+)
 
 from ..exceptions import SafetyError
 
@@ -13,9 +33,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # SCPI Input Sanitization
 # =============================================================================
-
-# Characters that could be used for SCPI command injection
-_SCPI_DANGEROUS_CHARS = re.compile(r"[;\n\r]")
 
 
 def sanitize_scpi_param(value: str) -> str:
@@ -32,6 +49,11 @@ def sanitize_scpi_param(value: str) -> str:
     function -- it is intended for string parameters like filenames,
     identifiers, modulation type names, and raw command strings.
 
+    The leading-`*` test now runs after stripping leading whitespace, so
+    `" *RST"` is rejected too. The old local implementation tested the raw
+    string and let that through -- a leading space is not something an
+    instrument's parser cares about, so it was a hole rather than a feature.
+
     Args:
         value: The user-provided string parameter.
 
@@ -41,25 +63,22 @@ def sanitize_scpi_param(value: str) -> str:
     Raises:
         ValueError: If the string contains dangerous SCPI metacharacters.
     """
-    if not isinstance(value, str):
-        raise ValueError(f"SCPI parameter must be a string, got {type(value).__name__}")
-
-    match = _SCPI_DANGEROUS_CHARS.search(value)
-    if match:
-        char = match.group()
-        char_repr = repr(char)
-        raise ValueError(
-            f"SCPI injection rejected: dangerous character {char_repr} "
-            f"found in parameter: {value!r}"
-        )
-
-    if value.startswith("*"):
+    try:
+        return check_scpi_param(value)
+    except ScpiParamError as e:
+        if e.rule is ScpiParamRule.NOT_A_STRING:
+            raise ValueError(
+                f"SCPI parameter must be a string, got {e.type_name}"
+            ) from None
+        if e.rule is ScpiParamRule.DANGEROUS_CHARACTER:
+            raise ValueError(
+                f"SCPI injection rejected: dangerous character {e.character!r} "
+                f"found in parameter: {e.value!r}"
+            ) from None
         raise ValueError(
             f"SCPI injection rejected: parameter must not start with '*' "
-            f"(could trigger instrument commands): {value!r}"
-        )
-
-    return value
+            f"(could trigger instrument commands): {e.value!r}"
+        ) from None
 
 
 # =============================================================================
@@ -85,30 +104,18 @@ def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
         ValueError: If the path resolves outside base_dir or is a
             symlink pointing outside base_dir.
     """
-    base_dir = Path(base_dir).resolve()
-    resolved = (base_dir / Path(user_path)).resolve()
-
-    # Check the resolved path is under the base directory
-    if not resolved.is_relative_to(base_dir):
+    try:
+        return check_safe_path(user_path, base_dir)
+    except UnsafePathError as e:
+        if e.rule is PathRule.TRAVERSAL:
+            raise ValueError(
+                f"Path traversal denied: {user_path!r} resolves to "
+                f"{e.resolved} which is outside {e.base}"
+            ) from None
         raise ValueError(
-            f"Path traversal denied: {user_path!r} resolves to "
-            f"{resolved} which is outside {base_dir}"
-        )
-
-    # Check for symlinks that point outside base_dir
-    # Walk each component to detect intermediate symlink escapes
-    check = base_dir
-    for part in resolved.relative_to(base_dir).parts:
-        check = check / part
-        if check.is_symlink():
-            link_target = check.resolve()
-            if not link_target.is_relative_to(base_dir):
-                raise ValueError(
-                    f"Symlink escape denied: {check} points to "
-                    f"{link_target} which is outside {base_dir}"
-                )
-
-    return resolved
+            f"Symlink escape denied: {e.link} points to "
+            f"{e.target} which is outside {e.base}"
+        ) from None
 
 
 @dataclass
