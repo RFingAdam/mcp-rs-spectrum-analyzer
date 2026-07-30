@@ -19,10 +19,11 @@
 └──────────────────────────────────────────────────────────────────┘
                               │
 ┌──────────────────────────────────────────────────────────────────┐
-│  Transport abstraction                                           │
-│  • transport/tcp_socket.py    — raw async TCP                    │
-│  • transport/visa.py          — PyVISA (GPIB/USB-TMC/HiSLIP)     │
-│  • transport/factory.py       — auto-detect from params          │
+│  Transport abstraction — shared, from scpi-core                  │
+│  • scpi_core.SCPISocket       — raw async TCP, desync-aware      │
+│  • scpi_core.VISATransport    — PyVISA (GPIB/USB-TMC/HiSLIP)     │
+│  • scpi_core.create_transport — auto-detect from params           │
+│  • transport/__init__.py      — re-export shim over the above    │
 └──────────────────────────────────────────────────────────────────┘
                               │
 ┌──────────────────────────────────────────────────────────────────┐
@@ -35,9 +36,10 @@
                        SCPI to instrument
 ```
 
-Concurrent tool calls are serialized per resource (connection, measurement,
-template) with `asyncio.Lock`. Failed state restores automatically roll back
-to the previous snapshot.
+Concurrent tool calls are serialized per resource: measurement, template and
+state each hold their own `asyncio.Lock`, while live analyzer connections are
+held by `scpi_core.ConnectionRegistry` (idle TTL plus a single eviction path).
+Failed state restores automatically roll back to the previous snapshot.
 
 ## Source layout
 
@@ -47,7 +49,7 @@ spectrum_analyzer_mcp/
 ├── config.py              # pydantic-settings
 ├── tools/                 # 62 tools across 14 modules
 │   ├── _registry.py       #   Central routing (handle_tool)
-│   ├── _connection.py     #   Connection pool + locks
+│   ├── _connection.py     #   scpi_core.ConnectionRegistry of live drivers
 │   ├── connection.py      #   Connect / disconnect / discover
 │   ├── frequency.py
 │   ├── amplitude.py
@@ -62,11 +64,12 @@ spectrum_analyzer_mcp/
 │   ├── limits_tools.py
 │   ├── state_tools.py
 │   └── system.py
-├── transport/             # TCP / VISA / factory
+├── transport/             # Re-export shim over scpi_core.transport
 ├── driver/                # SCPI driver + dialect map
 ├── models/                # TraceData, MarkerData, …
 ├── templates/             # Built-in measurement templates
 ├── safety/                # SCPI-injection guard, path validation
+├── sim/                   # Offline simulator node map (spectrum-simulator)
 ├── state.py               # Save / load with rollback
 └── limits.py              # Limit-line engine
 ```
@@ -117,11 +120,26 @@ physical analyzers over SCPI.
 
 ## Design decisions
 
-- **Transport-agnostic.** Same driver, two transports (`tcp_socket` and
-  `pyvisa`). The factory auto-detects from the resource string.
-- **One asyncio lock per resource class.** Connection, measurement, template,
-  and state each get their own lock — fine-grained enough to let independent
-  tools run concurrently, coarse enough to keep SCPI framing intact.
+- **Transport comes from `scpi-core`, not from here.** `SCPISocket` (raw TCP)
+  and `VISATransport` are shared with the sibling R&S servers; the factory
+  auto-detects from the resource string. The local `TCPSocketTransport` it
+  replaced held a query's send and its matching read under separate awaits, so a
+  timed-out read left the stream offset by one and the next query returned the
+  previous answer with no error. `SCPISocket` holds the pair under one
+  transaction and refuses to use a stream it cannot prove is clean.
+- **Every SCPI call site declares its idempotency.** `Idempotency.SETTING` marks
+  writes a transport may safely re-send after a failure; `ACTION` marks the ones
+  it must not, such as `*RST` and `CALC:MARK1:MAX:NEXT` — that second one steps
+  to a *different* peak on every arrival.
+- **One asyncio lock per resource class.** Measurement, template and state each
+  get their own lock — fine-grained enough to let independent tools run
+  concurrently, coarse enough to keep SCPI framing intact. Connections are the
+  exception: the shared registry owns their serialization.
+- **Offline mode is a node map, not a mock.** `spectrum-simulator` serves
+  `sim/nodes/spectrum.yaml` over TCP 5025 through `scpi_core.sim`, so the driver
+  is exercised against a command table rather than against `AsyncMock`. Nodes
+  marked `verified: false` are the bench checklist:
+  `spectrum-simulator --list-unverified`.
 - **Safety as defaults, not gates.** SCPI injection and path traversal are
   pre-validated; raw SCPI is on by default but can be turned off with one env
   variable for shared-bench setups.

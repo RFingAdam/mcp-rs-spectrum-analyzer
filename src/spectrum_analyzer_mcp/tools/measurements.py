@@ -5,6 +5,7 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from mcp.types import TextContent, Tool
+from scpi_core import Idempotency
 
 from ..exceptions import SpectrumAnalyzerError
 from ..safety.validators import sanitize_scpi_param
@@ -211,7 +212,7 @@ async def _handle_measure_evm(args: dict[str, Any]) -> list[TextContent]:
     """
     sa = await _get_sa(args.get("host"), args.get("port"))
     modulation = sanitize_scpi_param(args.get("modulation", "QPSK"))
-    await sa.scpi_send(f"SENS:DDEM:FORM {modulation}")
+    await sa.scpi_send(f"SENS:DDEM:FORM {modulation}", idempotency=Idempotency.SETTING)
     await sa.single_sweep()
     try:
         evm_resp = await sa.scpi_query("CALC:MARK:FUNC:DDEM:EVM?")
@@ -244,8 +245,8 @@ async def _handle_measure_ccdf(args: dict[str, Any]) -> list[TextContent]:
     """
     sa = await _get_sa(args.get("host"), args.get("port"))
     num_samples = args.get("num_samples", 1000000)
-    await sa.scpi_send("CALC:STAT:CCDF ON")
-    await sa.scpi_send(f"CALC:STAT:NSAM {num_samples}")
+    await sa.scpi_send("CALC:STAT:CCDF ON", idempotency=Idempotency.SETTING)
+    await sa.scpi_send(f"CALC:STAT:NSAM {num_samples}", idempotency=Idempotency.SETTING)
     await sa.single_sweep()
     try:
         ccdf_resp = await sa.scpi_query("CALC:STAT:RES?")

@@ -84,8 +84,10 @@ def get_tools() -> list[Tool]:
     return tools
 
 
-# Re-export locks and internal state for tests that need them
-from ._connection import _connection_lock  # noqa: E402, F401
+# Re-export locks and internal state for tests that need them. The connection
+# lock is gone: ConnectionRegistry owns that serialization now, so the registry
+# itself is what there is to inspect.
+from ._connection import _sa_registry  # noqa: E402, F401
 from .limits_tools import _measurement_lock  # noqa: E402, F401
 from .templates_tools import _current_template, _template_lock  # noqa: E402, F401
 
@@ -93,7 +95,7 @@ __all__ = [
     "get_tools",
     "handle_tool",
     "_get_all_handlers",
-    "_connection_lock",
+    "_sa_registry",
     "_template_lock",
     "_measurement_lock",
     "_current_template",

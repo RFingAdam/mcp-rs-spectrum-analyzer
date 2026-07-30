@@ -1,0 +1,348 @@
+# Spectrum/signal analyzer node map for scpi-sim.
+#
+# This server previously had no offline mode at all, so every test that needed a
+# reply had to mock the transport. That proves the driver's Python but never that
+# the bytes it writes are commands an analyzer would accept.
+#
+# Scope: the commands this repo actually emits. That list was derived by grepping
+# src/ and tests/ for SCPI literals -- driver/sa_driver.py, driver/scpi_dialect.py
+# (the generic dialect's defaults), state.py, tools/export.py and
+# tools/measurements.py -- rather than transcribing a whole FSW command reference
+# that nothing here would exercise.
+#
+# Paths are written in R&S long/short notation so both `SENS:FREQ:CENT` and
+# `SENSe:FREQuency:CENTer` match, which is what a real analyzer accepts and what
+# keeps the map from silently pinning one abbreviation.
+#
+# `verified: false` marks a node transcribed from what this repo emits and NOT
+# confirmed against a published command reference or hardware. Those are the bench
+# checklist, not silent assumptions:
+#   spectrum-simulator --list-unverified
+#
+# Fidelity caveat that matters for anything reading a number back: defaults below
+# are plausible shapes, not measurements. A value that parses is not a value that
+# means anything.
+
+idn: "Rohde&Schwarz,FSW-26-SIMULATOR,SIM-0001,V0.0.0-sim"
+
+banner_note: >-
+  Modelled as a generic SCPI-99 spectrum analyzer using the RS_DIALECT command
+  set from driver/scpi_dialect.py. Digital-demodulation and statistics nodes are
+  present so the EVM and CCDF tools can be exercised, but no analyzer answers
+  those without the corresponding option fitted.
+
+# Reported by *OPT?. Deliberately includes the options whose commands this map
+# answers -- a simulator that replies to DDEMod while reporting no demod option
+# would teach a capability check something false.
+options:
+  - FSW-B1000   # analysis bandwidth
+  - FSW-K70     # vector signal analysis (DDEMod, EVM)
+  - FSW-K7      # analog demodulation / statistics
+
+# Real durations, before --time-scale. A preset and a self-alignment genuinely
+# take this long, and code that assumes otherwise breaks on the bench rather than
+# in CI.
+durations:
+  - pattern: '^\*RST'
+    seconds: 2.0
+  - pattern: '^SYSTem:PRESet|^SYST:PRES'
+    seconds: 2.0
+  - pattern: '^CAL(ibration)?:ALL'
+    seconds: 20.0
+  - pattern: '^INIT(iate)?:IMM'
+    seconds: 0.05
+  - pattern: '^HCOP(y)?:IMM'
+    seconds: 1.0
+
+nodes:
+  # -- IEEE 488.2 common commands -------------------------------------------
+  - path: '*IDN'
+    settable: false
+  - path: '*OPT'
+    settable: false
+  - path: '*OPC'
+  - path: '*CLS'
+    queryable: false
+  - path: '*RST'
+    queryable: false
+
+  # -- System ----------------------------------------------------------------
+  - path: SYSTem:ERRor
+    settable: false
+  - path: SYSTem:PRESet
+    queryable: false
+  - path: SYSTem:DISPlay:UPDate
+    key: syst.disp.upd
+    default: 'ON'
+  - path: CALibration:ALL
+    settable: false
+    key: cal.all
+    # "0" is the documented pass code, which is what driver.run_alignment()
+    # compares against; a simulator that always passes alignment is stating that
+    # it has no hardware to misalign.
+    default: '0'
+
+  # -- Frequency -------------------------------------------------------------
+  - path: SENSe:FREQuency:CENTer
+    key: freq.center
+    default: '1000000000'
+  - path: SENSe:FREQuency:CENTer:STEP
+    key: freq.center.step
+    default: '100000000'
+  - path: SENSe:FREQuency:SPAN
+    key: freq.span
+    default: '1000000000'
+  - path: SENSe:FREQuency:SPAN:FULL
+    queryable: false
+    key: freq.span.full
+    # Carries no value: it is the effect. Writing it snaps the span to the
+    # modelled instrument's full range and moves start/stop to match, which is
+    # the part a settings store cannot express on its own.
+    effects:
+      freq.span: '26500000000'
+      freq.start: '2'
+      freq.stop: '26500000000'
+  - path: SENSe:FREQuency:STARt
+    key: freq.start
+    default: '500000000'
+  - path: SENSe:FREQuency:STOP
+    key: freq.stop
+    default: '1500000000'
+
+  # -- Amplitude -------------------------------------------------------------
+  # TRACe<1-6> carries an optional suffix, so this one node answers both the
+  # unsuffixed `DISP:TRAC:Y:RLEV` the driver sends and a suffixed form.
+  - path: DISPlay:TRACe<1-6>:Y:RLEVel
+    key: disp.trace{n}.y.rlev
+    default: '0'
+  - path: DISPlay:TRACe<1-6>:Y:PDIVision
+    key: disp.trace{n}.y.pdiv
+    default: '10'
+  - path: DISPlay:TRACe<1-6>:MODE
+    key: disp.trace{n}.mode
+    default: WRITe
+  - path: INPut:ATTenuation
+    key: inp.att
+    default: '10'
+  - path: INPut:GAIN:STATe
+    key: inp.gain.state
+    # OFF, so driver.get_preamp() reports False on a fresh connection rather than
+    # claiming a preamp is in circuit.
+    default: 'OFF'
+
+  # -- Bandwidth and sweep ---------------------------------------------------
+  - path: SENSe:BANDwidth:RESolution
+    key: bwid.res
+    default: '1000000'
+  - path: SENSe:BANDwidth:RESolution:AUTO
+    key: bwid.res.auto
+    default: 'ON'
+  - path: SENSe:BANDwidth:VIDeo
+    key: bwid.vid
+    default: '3000000'
+  - path: SENSe:BANDwidth:VIDeo:AUTO
+    key: bwid.vid.auto
+    default: 'ON'
+  - path: SENSe:SWEep:TIME
+    key: swe.time
+    default: '0.01'
+  - path: SENSe:SWEep:TIME:AUTO
+    key: swe.time.auto
+    default: 'ON'
+  - path: SENSe:SWEep:POINts
+    key: swe.points
+    default: '1001'
+  - path: INITiate:CONTinuous
+    key: init.cont
+    default: 'ON'
+  # Event commands below carry no value, so they declare `default: ''`. Without
+  # that the simulator treats a bare write as a missing parameter and pushes
+  # -109 into the error queue, which a driver polling SYST:ERR? would report as
+  # an instrument complaint about a command that was in fact correct.
+  - path: INITiate:IMMediate
+    queryable: false
+    key: init.imm
+    default: ''
+  - path: TRIGger:SOURce
+    key: trig.source
+    default: IMM
+  - path: TRIGger:LEVel
+    key: trig.level
+    default: '-20'
+
+  # -- Trace and detector ----------------------------------------------------
+  - path: TRACe<1-6>:DATA
+    settable: false
+    key: trace{n}.data
+    # 11 points with a peak in the middle, so get_trace_data() produces a trace
+    # whose peak search has something to find and whose frequency axis has more
+    # than one step to interpolate.
+    default: '-92.10,-91.40,-88.70,-80.20,-62.50,-41.30,-63.10,-81.00,-89.30,-91.80,-92.40'
+    verified: false
+    note: >-
+      ASCII trace format only. Real hardware answers this way only while
+      FORMat:DATA is ASCii; under REAL,32 the reply is an IEEE-488.2
+      definite-length block (`#42048` then raw little-endian floats) that must be
+      read with query_binary rather than query_float_list. This map does not model
+      the binary form.
+  - path: SENSe:DETector<1-6>
+    key: det{n}
+    default: RMS
+  - path: SENSe:AVERage:STATe
+    key: aver.state
+    default: 'OFF'
+  - path: SENSe:AVERage:COUNt
+    key: aver.count
+    default: '10'
+
+  # -- Markers ---------------------------------------------------------------
+  - path: CALCulate<1-4>:MARKer<1-16>:STATe
+    key: calc{n}.mark{n}.state
+    default: 'OFF'
+  - path: CALCulate<1-4>:MARKer<1-16>:X
+    key: calc{n}.mark{n}.x
+    default: '1000000000'
+  - path: CALCulate<1-4>:MARKer<1-16>:Y
+    settable: false
+    key: calc{n}.mark{n}.y
+    default: '-41.30'
+  - path: CALCulate<1-4>:MARKer<1-16>:MAXimum
+    queryable: false
+    key: calc{n}.mark{n}.max
+    # A peak search is its own effect: it moves the marker. Modelled by snapping
+    # marker 1 onto the peak of the canned trace above, so peak_search() returns
+    # something self-consistent instead of the marker's previous position.
+    #
+    # Only marker 1. `effects` keys are literal (with globs), so the suffix that
+    # matched the header cannot be substituted into them, and a glob would move
+    # every marker at once. A peak search on marker 2 therefore reads back
+    # marker 2's previous position here -- a limitation of the model, not of the
+    # instrument.
+    effects:
+      calc1.mark1.x: '1000000000'
+      calc1.mark1.y: '-41.30'
+  - path: CALCulate<1-4>:MARKer<1-16>:MAXimum:NEXT
+    queryable: false
+    key: calc{n}.mark{n}.max.next
+    default: ''
+  - path: CALCulate<1-4>:MARKer<1-16>:MAXimum:LEFT
+    queryable: false
+    key: calc{n}.mark{n}.max.left
+    default: ''
+  - path: CALCulate<1-4>:MARKer<1-16>:MAXimum:RIGHt
+    queryable: false
+    key: calc{n}.mark{n}.max.right
+    default: ''
+  - path: CALCulate<1-4>:DELTamarker<1-16>:STATe
+    key: calc{n}.delt{n}.state
+    default: 'OFF'
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:BWIDth:STATe
+    key: calc{n}.mark{n}.bwid.state
+    default: 'OFF'
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:BWIDth:NDB
+    key: calc{n}.mark{n}.bwid.ndb
+    default: '3'
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:BWIDth:RESult
+    settable: false
+    key: calc{n}.mark{n}.bwid.result
+    # bandwidth, center frequency, quality factor -- the order
+    # driver.marker_bandwidth() unpacks.
+    default: '1000000,1000000000,1000'
+    verified: false
+    note: >-
+      Field order taken from how this driver unpacks the reply, not from a
+      command reference. Confirm on hardware before trusting Q.
+
+  # -- Power measurements ----------------------------------------------------
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:POWer:SELect
+    key: calc{n}.mark{n}.pow.select
+    default: CPOWer
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:POWer:RESult
+    settable: false
+    key: calc{n}.mark{n}.pow.result
+    # One store slot answers CPOW, ACP, OBW and ESP because the simulator keys on
+    # the header and the measurement selection travels as a query *argument*.
+    # The default is shaped to be parseable by all four readers rather than
+    # correct for any of them: field 0 reads as channel power, fields 1-2 as the
+    # adjacent channels, and the whole list as an SEM limit/measured series.
+    default: '-20.50,-60.20,-61.00,-70.00,-71.00'
+    verified: false
+    note: >-
+      Shared across every POWer:SELect mode. Numbers are shaped to parse, not to
+      mean anything; an OBW reading taken from this node is field 0 of a channel
+      power reply.
+  - path: SENSe:POWer:ACHannel:BWIDth:CHANnel<1-12>
+    key: pow.ach.bwid.chan{n}
+    default: '3840000'
+  - path: SENSe:POWer:ACHannel:BWIDth:ACHannel
+    key: pow.ach.bwid.ach
+    default: '3840000'
+  - path: SENSe:POWer:ACHannel:SPACing
+    key: pow.ach.spacing
+    default: '5000000'
+  - path: SENSe:POWer:ACHannel:BWIDth:PCT
+    key: pow.ach.bwid.pct
+    default: '99'
+    verified: false
+    note: >-
+      The OBW percentage mnemonic tools/measurements.py emits. Not confirmed
+      against any FSW/FPL command reference; check it before believing an OBW
+      result from real hardware.
+
+  # -- Digital demodulation and statistics (option-gated on hardware) --------
+  - path: SENSe:DDEMod:FORMat
+    key: ddem.format
+    default: QPSK
+    verified: false
+    note: Transcribed from what this repo emits; needs the K70 option on hardware.
+  - path: CALCulate<1-4>:MARKer<1-16>:FUNCtion:DDEMod:EVM
+    settable: false
+    key: calc{n}.mark{n}.ddem.evm
+    default: '1.50'
+    verified: false
+    note: >-
+      Transcribed from what tools/measurements.py emits, and the one node here
+      most likely to be wrong: an EVM result is normally read through the K70
+      result subsystem rather than a marker function.
+  - path: CALCulate<1-4>:STATistics:CCDF
+    key: calc{n}.stat.ccdf
+    default: 'OFF'
+    verified: false
+  - path: CALCulate<1-4>:STATistics:NSAMples
+    key: calc{n}.stat.nsamples
+    default: '1000000'
+    verified: false
+  - path: CALCulate<1-4>:STATistics:RESult
+    settable: false
+    key: calc{n}.stat.result
+    # crest factor dB, mean power dBm, peak power dBm -- the order
+    # tools/measurements.py unpacks.
+    default: '10.20,-30.50,-20.30'
+    verified: false
+    note: >-
+      Field order taken from how this repo unpacks the reply. On hardware
+      CALCulate:STATistics:RESult takes a trace suffix and a result selector.
+
+  # -- Hardcopy / screenshot -------------------------------------------------
+  - path: HCOPy:DEVice:LANGuage
+    key: hcop.dev.lang
+    default: PNG
+  - path: HCOPy:DESTination
+    key: hcop.dest
+    default: "'MMEM'"
+  - path: HCOPy:IMMediate
+    queryable: false
+    key: hcop.imm
+    default: ''
+  - path: HCOPy:DATA
+    settable: false
+    key: hcop.data
+    default: '0'
+    verified: false
+    note: >-
+      Present so the header is not an undefined-header error, but NOT usable
+      through capture_screenshot(): that path calls query_binary and needs a real
+      `#<n><len><bytes>` block, which this simulator does not synthesise.
+  - path: MMEMory:NAME
+    key: mmem.name
+    default: "'sim.png'"

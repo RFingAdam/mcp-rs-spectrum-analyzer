@@ -1,61 +1,45 @@
-"""Custom exceptions for spectrum analyzer operations.
+"""Exceptions for spectrum analyzer operations.
 
-This module defines all exceptions at the package root level to avoid
-circular import issues between driver and safety modules.
+Defined at the package root to avoid circular imports between the driver and
+safety modules -- that reason still holds, so this module stays where it is even
+though the class bodies now live in ``scpi_core.exceptions``.
+
+``SpectrumAnalyzerError`` is an alias of ``scpi_core.InstrumentError``: nothing
+in the hierarchy was analyzer-specific, and keeping a separate base class would
+have meant a ``DesyncError`` raised by the shared transport was not catchable by
+this server's own ``except SpectrumAnalyzerError``.
+
+``MeasurementError`` stays a real class here. It is the one genuinely
+analyzer-shaped failure in the set, and the core deliberately declined to model
+measurements for instruments that do not have them.
 """
 
+from scpi_core.exceptions import (
+    CommunicationError,
+    ConfigurationError,
+    ConnectionError,
+    DesyncError,
+    InstrumentError,
+    SafetyError,
+    TimeoutError,
+)
 
-class SpectrumAnalyzerError(Exception):
-    """Base exception for spectrum analyzer errors."""
-
-    def __init__(self, message: str, address: str | None = None):
-        self.message = message
-        self.address = address
-        super().__init__(f"{message}" + (f" (address: {address})" if address else ""))
-
-
-class ConnectionError(SpectrumAnalyzerError):
-    """Error connecting to spectrum analyzer."""
-
-    pass
+#: Historical name for this server's base exception.
+SpectrumAnalyzerError = InstrumentError
 
 
-class CommunicationError(SpectrumAnalyzerError):
-    """Error communicating with spectrum analyzer."""
-
-    pass
-
-
-class ConfigurationError(SpectrumAnalyzerError):
-    """Error configuring spectrum analyzer settings."""
-
-    pass
-
-
-class MeasurementError(SpectrumAnalyzerError):
+class MeasurementError(InstrumentError):
     """Error during measurement."""
 
-    pass
 
-
-class SafetyError(SpectrumAnalyzerError):
-    """Safety limit violation."""
-
-    def __init__(
-        self,
-        message: str,
-        parameter: str,
-        value: float,
-        limit: float,
-        address: str | None = None,
-    ):
-        self.parameter = parameter
-        self.value = value
-        self.limit = limit
-        super().__init__(message, address)
-
-
-class TimeoutError(SpectrumAnalyzerError):
-    """Operation timed out."""
-
-    pass
+__all__ = [
+    "CommunicationError",
+    "ConfigurationError",
+    "ConnectionError",
+    "DesyncError",
+    "InstrumentError",
+    "MeasurementError",
+    "SafetyError",
+    "SpectrumAnalyzerError",
+    "TimeoutError",
+]

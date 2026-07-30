@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp.types import TextContent, Tool
+from scpi_core import Idempotency
 
 from ..safety.validators import sanitize_scpi_param, validate_safe_path
 from ._connection import _get_sa
@@ -146,9 +147,11 @@ async def _handle_save_screenshot(args: dict[str, Any]) -> list[TextContent]:
     filepath = args["filepath"]
     safe_filepath = sanitize_scpi_param(filepath)
     safe_filepath = safe_filepath.replace("'", "\\'")
-    await sa.scpi_send("HCOP:DEV:LANG PNG")
-    await sa.scpi_send(f"MMEM:NAME '{safe_filepath}'")
-    await sa.scpi_send("HCOP:IMM")
+    await sa.scpi_send("HCOP:DEV:LANG PNG", idempotency=Idempotency.SETTING)
+    await sa.scpi_send(f"MMEM:NAME '{safe_filepath}'", idempotency=Idempotency.SETTING)
+    # The capture itself: a second one overwrites the file the caller was told
+    # about, so it is never retried behind their back.
+    await sa.scpi_send("HCOP:IMM", idempotency=Idempotency.ACTION)
     return _format_result(
         {
             "filepath": filepath,

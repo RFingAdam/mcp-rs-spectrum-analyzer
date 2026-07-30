@@ -28,10 +28,17 @@ from ..models.sa_types import (
     TraceMode,
 )
 from ..safety.validators import SafetyLimits, SafetyValidator, sanitize_scpi_param
-from ..transport import SCPITransport, TCPSocketTransport
-from .scpi_socket import SCPISocket  # noqa: F401 – backward compat
+from ..transport import Idempotency, SCPISocket, SCPITransport
 
 logger = logging.getLogger(__name__)
+
+# Idempotency is declared at every call site rather than left to the transport's
+# default, because only this layer knows what a command means. `send()` defaults
+# to ACTION -- never retried -- which is the safe assumption for an unclassified
+# command but forgoes a free retry for the many sends here that merely assign a
+# value. The distinction that actually bites is inside the marker functions:
+# `CALC:MARK1:X <hz>` may be re-sent all day, while `CALC:MARK1:MAX:NEXT`
+# advances to a *different* peak each time it arrives.
 
 
 def _parse_float(value: str, field_name: str = "value") -> float:
@@ -106,7 +113,7 @@ class RSSpectrumAnalyzerDriver:
         if transport is not None:
             self._socket: SCPITransport = transport
         else:
-            self._socket = TCPSocketTransport(host, port, timeout, command_timeout)
+            self._socket = SCPISocket(host, port, timeout, command_timeout)
         self._validator = SafetyValidator(safety_limits)
         self._state = ConnectionState.DISCONNECTED
         self._info: InstrumentInfo | None = None
@@ -122,6 +129,16 @@ class RSSpectrumAnalyzerDriver:
     def state(self) -> ConnectionState:
         """Get connection state."""
         return self._state
+
+    @property
+    def resync_count(self) -> int:
+        """How many times the transport had to recover a desynced stream.
+
+        Exposed because the tally dies with the connection otherwise, and a
+        non-zero count is the clearest signal that command timeouts are tighter
+        than the sweep times actually in use.
+        """
+        return self._socket.resync_count
 
     @property
     def info(self) -> InstrumentInfo | None:
@@ -188,9 +205,18 @@ class RSSpectrumAnalyzerDriver:
     # Raw SCPI
     # =========================================================================
 
-    async def scpi_send(self, command: str) -> None:
-        """Send raw SCPI command."""
-        await self._socket.send(command)
+    async def scpi_send(
+        self,
+        command: str,
+        idempotency: Idempotency = Idempotency.ACTION,
+    ) -> None:
+        """Send raw SCPI command.
+
+        The command is opaque to this driver, so the default refuses retries.
+        Callers that build the command themselves and know it is a plain
+        assignment -- the state-restore replay, for one -- should say SETTING.
+        """
+        await self._socket.send(command, idempotency=idempotency)
 
     async def scpi_query(self, command: str, timeout: float | None = None) -> str:
         """Send raw SCPI query and return response."""
@@ -198,13 +224,13 @@ class RSSpectrumAnalyzerDriver:
 
     async def reset(self) -> None:
         """Reset instrument (*RST)."""
-        await self._socket.send("*RST")
+        await self._socket.send("*RST", idempotency=Idempotency.ACTION)
         await self._socket.wait_opc()
         logger.info("Instrument reset")
 
     async def preset(self) -> None:
         """Preset instrument (SYSTem:PRESet)."""
-        await self._socket.send("SYST:PRES")
+        await self._socket.send("SYST:PRES", idempotency=Idempotency.ACTION)
         await self._socket.wait_opc()
         logger.info("Instrument preset")
 
@@ -224,7 +250,7 @@ class RSSpectrumAnalyzerDriver:
 
     async def set_sweep_points(self, points: int) -> None:
         """Set number of sweep points."""
-        await self._socket.send(f"SENS:SWE:POIN {points}")
+        await self._socket.send(f"SENS:SWE:POIN {points}", idempotency=Idempotency.SETTING)
 
     async def get_sweep_points(self) -> int:
         """Get number of sweep points."""
@@ -234,19 +260,24 @@ class RSSpectrumAnalyzerDriver:
     async def set_display_update(self, enabled: bool) -> None:
         """Enable/disable display updates for faster remote operation."""
         state = "ON" if enabled else "OFF"
-        await self._socket.send(f"SYST:DISP:UPD {state}")
+        await self._socket.send(f"SYST:DISP:UPD {state}", idempotency=Idempotency.SETTING)
 
     async def capture_screenshot(self, fmt: str = "PNG") -> bytes:
         """Capture screenshot and return as bytes."""
-        await self._socket.send(f"HCOP:DEV:LANG {fmt}")
-        await self._socket.send("HCOP:DEST 'MMEM'")
-        await self._socket.send("HCOP:IMM")
+        await self._socket.send(f"HCOP:DEV:LANG {fmt}", idempotency=Idempotency.SETTING)
+        await self._socket.send("HCOP:DEST 'MMEM'", idempotency=Idempotency.SETTING)
+        await self._socket.send("HCOP:IMM", idempotency=Idempotency.ACTION)
         await self._socket.wait_opc()
         return await self._socket.query_binary("HCOP:DATA?")
 
     async def run_alignment(self) -> str:
         """Run internal self-alignment/calibration."""
-        resp = await self._socket.query("CAL:ALL?", timeout=120.0)
+        # A query by syntax, an action by effect: a retry restarts a
+        # multi-minute alignment rather than re-reading a value, so it must not
+        # inherit query()'s retryable default.
+        resp = await self._socket.query(
+            "CAL:ALL?", timeout=120.0, idempotency=Idempotency.ACTION
+        )
         return resp
 
     # =========================================================================
@@ -256,14 +287,14 @@ class RSSpectrumAnalyzerDriver:
     async def set_center_frequency(self, freq_hz: float) -> None:
         """Set center frequency."""
         self._validator.validate_frequency(freq_hz)
-        await self._socket.send(f"SENS:FREQ:CENT {freq_hz}")
+        await self._socket.send(f"SENS:FREQ:CENT {freq_hz}", idempotency=Idempotency.SETTING)
         logger.debug(f"Center frequency set to {freq_hz / 1e6:.3f} MHz")
 
     async def set_span(self, span_hz: float) -> None:
         """Set frequency span. Use 0 for zero-span."""
         if span_hz < 0:
             raise ConfigurationError("Span cannot be negative")
-        await self._socket.send(f"SENS:FREQ:SPAN {span_hz}")
+        await self._socket.send(f"SENS:FREQ:SPAN {span_hz}", idempotency=Idempotency.SETTING)
         logger.debug(f"Span set to {span_hz / 1e6:.3f} MHz")
 
     async def set_center_span(self, center_hz: float, span_hz: float) -> None:
@@ -275,17 +306,19 @@ class RSSpectrumAnalyzerDriver:
     async def set_start_stop(self, start_hz: float, stop_hz: float) -> None:
         """Set start and stop frequencies."""
         self._validator.validate_frequency_range(start_hz, stop_hz)
-        await self._socket.send(f"SENS:FREQ:STAR {start_hz}")
-        await self._socket.send(f"SENS:FREQ:STOP {stop_hz}")
+        await self._socket.send(f"SENS:FREQ:STAR {start_hz}", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:FREQ:STOP {stop_hz}", idempotency=Idempotency.SETTING)
         logger.debug(f"Frequency range set to {start_hz / 1e6:.3f} - {stop_hz / 1e6:.3f} MHz")
 
     async def set_frequency_step(self, step_hz: float) -> None:
         """Set frequency step for manual tuning."""
-        await self._socket.send(f"SENS:FREQ:CENT:STEP {step_hz}")
+        await self._socket.send(
+            f"SENS:FREQ:CENT:STEP {step_hz}", idempotency=Idempotency.SETTING
+        )
 
     async def full_span(self) -> None:
         """Set full span."""
-        await self._socket.send("SENS:FREQ:SPAN:FULL")
+        await self._socket.send("SENS:FREQ:SPAN:FULL", idempotency=Idempotency.SETTING)
         logger.debug("Full span set")
 
     async def get_center_frequency(self) -> float:
@@ -315,7 +348,9 @@ class RSSpectrumAnalyzerDriver:
     async def set_reference_level(self, level_dbm: float) -> None:
         """Set reference level."""
         self._validator.validate_reference_level(level_dbm)
-        await self._socket.send(f"DISP:TRAC:Y:RLEV {level_dbm}")
+        await self._socket.send(
+            f"DISP:TRAC:Y:RLEV {level_dbm}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Reference level set to {level_dbm} dBm")
 
     async def get_reference_level(self) -> float:
@@ -326,7 +361,7 @@ class RSSpectrumAnalyzerDriver:
     async def set_attenuation(self, atten_db: float) -> None:
         """Set input attenuation."""
         self._validator.validate_attenuation(atten_db)
-        await self._socket.send(f"INP:ATT {atten_db}")
+        await self._socket.send(f"INP:ATT {atten_db}", idempotency=Idempotency.SETTING)
         logger.debug(f"Attenuation set to {atten_db} dB")
 
     async def get_attenuation(self) -> float:
@@ -337,7 +372,7 @@ class RSSpectrumAnalyzerDriver:
     async def set_preamp(self, enabled: bool) -> None:
         """Enable or disable preamplifier."""
         state = "ON" if enabled else "OFF"
-        await self._socket.send(f"INP:GAIN:STAT {state}")
+        await self._socket.send(f"INP:GAIN:STAT {state}", idempotency=Idempotency.SETTING)
         logger.debug(f"Preamplifier {'enabled' if enabled else 'disabled'}")
 
     async def get_preamp(self) -> bool:
@@ -349,7 +384,9 @@ class RSSpectrumAnalyzerDriver:
         """Set Y-axis scale in dB/division."""
         if db_per_div <= 0:
             raise ConfigurationError("Scale must be positive")
-        await self._socket.send(f"DISP:TRAC:Y:PDIV {db_per_div}")
+        await self._socket.send(
+            f"DISP:TRAC:Y:PDIV {db_per_div}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Scale set to {db_per_div} dB/div")
 
     # =========================================================================
@@ -359,8 +396,8 @@ class RSSpectrumAnalyzerDriver:
     async def set_rbw(self, rbw_hz: float) -> None:
         """Set resolution bandwidth."""
         self._validator.validate_rbw(rbw_hz)
-        await self._socket.send("SENS:BAND:RES:AUTO OFF")
-        await self._socket.send(f"SENS:BAND:RES {rbw_hz}")
+        await self._socket.send("SENS:BAND:RES:AUTO OFF", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:BAND:RES {rbw_hz}", idempotency=Idempotency.SETTING)
         logger.debug(f"RBW set to {rbw_hz / 1e3:.1f} kHz")
 
     async def get_rbw(self) -> float:
@@ -370,8 +407,8 @@ class RSSpectrumAnalyzerDriver:
 
     async def set_vbw(self, vbw_hz: float) -> None:
         """Set video bandwidth."""
-        await self._socket.send("SENS:BAND:VID:AUTO OFF")
-        await self._socket.send(f"SENS:BAND:VID {vbw_hz}")
+        await self._socket.send("SENS:BAND:VID:AUTO OFF", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:BAND:VID {vbw_hz}", idempotency=Idempotency.SETTING)
         logger.debug(f"VBW set to {vbw_hz / 1e3:.1f} kHz")
 
     async def get_vbw(self) -> float:
@@ -383,8 +420,8 @@ class RSSpectrumAnalyzerDriver:
         """Set sweep time."""
         if time_s <= 0:
             raise ConfigurationError("Sweep time must be positive")
-        await self._socket.send("SENS:SWE:TIME:AUTO OFF")
-        await self._socket.send(f"SENS:SWE:TIME {time_s}")
+        await self._socket.send("SENS:SWE:TIME:AUTO OFF", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:SWE:TIME {time_s}", idempotency=Idempotency.SETTING)
         logger.debug(f"Sweep time set to {time_s} s")
 
     async def get_sweep_time(self) -> float:
@@ -394,9 +431,9 @@ class RSSpectrumAnalyzerDriver:
 
     async def auto_coupling(self) -> None:
         """Enable auto-coupling for RBW, VBW, and sweep time."""
-        await self._socket.send("SENS:BAND:RES:AUTO ON")
-        await self._socket.send("SENS:BAND:VID:AUTO ON")
-        await self._socket.send("SENS:SWE:TIME:AUTO ON")
+        await self._socket.send("SENS:BAND:RES:AUTO ON", idempotency=Idempotency.SETTING)
+        await self._socket.send("SENS:BAND:VID:AUTO ON", idempotency=Idempotency.SETTING)
+        await self._socket.send("SENS:SWE:TIME:AUTO ON", idempotency=Idempotency.SETTING)
         logger.debug("Auto-coupling enabled for RBW, VBW, sweep time")
 
     # =========================================================================
@@ -449,12 +486,16 @@ class RSSpectrumAnalyzerDriver:
 
     async def set_trace_mode(self, mode: TraceMode, trace_number: int = 1) -> None:
         """Set trace mode."""
-        await self._socket.send(f"DISP:TRAC{trace_number}:MODE {mode.value}")
+        await self._socket.send(
+            f"DISP:TRAC{trace_number}:MODE {mode.value}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Trace {trace_number} mode set to {mode.value}")
 
     async def set_detector(self, detector: DetectorType, trace_number: int = 1) -> None:
         """Set detector type."""
-        await self._socket.send(f"SENS:DET{trace_number} {detector.value}")
+        await self._socket.send(
+            f"SENS:DET{trace_number} {detector.value}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Detector {trace_number} set to {detector.value}")
 
     async def set_averaging_count(self, count: int) -> None:
@@ -462,15 +503,19 @@ class RSSpectrumAnalyzerDriver:
         if count < 0:
             raise ConfigurationError("Average count must be non-negative")
         if count <= 1:
-            await self._socket.send("SENS:AVER:STAT OFF")
+            await self._socket.send("SENS:AVER:STAT OFF", idempotency=Idempotency.SETTING)
         else:
-            await self._socket.send("SENS:AVER:STAT ON")
-            await self._socket.send(f"SENS:AVER:COUN {count}")
+            await self._socket.send("SENS:AVER:STAT ON", idempotency=Idempotency.SETTING)
+            await self._socket.send(
+                f"SENS:AVER:COUN {count}", idempotency=Idempotency.SETTING
+            )
         logger.debug(f"Averaging count set to {count}")
 
     async def clear_trace(self, trace_number: int = 1) -> None:
         """Clear/reset trace data."""
-        await self._socket.send(f"DISP:TRAC{trace_number}:MODE WRITe")
+        await self._socket.send(
+            f"DISP:TRAC{trace_number}:MODE WRITe", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Trace {trace_number} cleared")
 
     # =========================================================================
@@ -480,8 +525,12 @@ class RSSpectrumAnalyzerDriver:
     async def set_marker(self, frequency_hz: float, marker_number: int = 1) -> None:
         """Position a marker at a specific frequency."""
         self._validator.validate_frequency(frequency_hz)
-        await self._socket.send(f"CALC:MARK{marker_number}:STAT ON")
-        await self._socket.send(f"CALC:MARK{marker_number}:X {frequency_hz}")
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:STAT ON", idempotency=Idempotency.SETTING
+        )
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:X {frequency_hz}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Marker {marker_number} set to {frequency_hz / 1e6:.3f} MHz")
 
     async def get_marker(self, marker_number: int = 1) -> MarkerData:
@@ -497,8 +546,14 @@ class RSSpectrumAnalyzerDriver:
 
     async def peak_search(self, marker_number: int = 1) -> MarkerData:
         """Find peak on trace and position marker."""
-        await self._socket.send(f"CALC:MARK{marker_number}:STAT ON")
-        await self._socket.send(f"CALC:MARK{marker_number}:MAX")
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:STAT ON", idempotency=Idempotency.SETTING
+        )
+        # A search, not an assignment: it repositions the marker rather than
+        # storing a value, so it is never re-sent after a transport failure.
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:MAX", idempotency=Idempotency.ACTION
+        )
         return await self.get_marker(marker_number)
 
     async def next_peak(self, marker_number: int = 1, direction: str = "next") -> MarkerData:
@@ -515,7 +570,10 @@ class RSSpectrumAnalyzerDriver:
             "right": f"CALC:MARK{marker_number}:MAX:RIGH",
         }
         cmd = cmd_map.get(direction, cmd_map["next"])
-        await self._socket.send(cmd)
+        # Emphatically not retryable: each arrival steps to the *next* peak, so a
+        # duplicate leaves the marker somewhere the caller never asked for and
+        # the reading that follows looks perfectly plausible.
+        await self._socket.send(cmd, idempotency=Idempotency.ACTION)
         return await self.get_marker(marker_number)
 
     async def marker_to_center(self, marker_number: int = 1) -> None:
@@ -527,7 +585,9 @@ class RSSpectrumAnalyzerDriver:
     async def set_delta_marker(self, marker_number: int = 1, enabled: bool = True) -> None:
         """Enable/disable delta marker."""
         state = "ON" if enabled else "OFF"
-        await self._socket.send(f"CALC:DELT{marker_number}:STAT {state}")
+        await self._socket.send(
+            f"CALC:DELT{marker_number}:STAT {state}", idempotency=Idempotency.SETTING
+        )
         logger.debug(f"Delta marker {marker_number} {'enabled' if enabled else 'disabled'}")
 
     async def marker_bandwidth(self, n_db: float = 3.0, marker_number: int = 1) -> dict:
@@ -541,8 +601,12 @@ class RSSpectrumAnalyzerDriver:
         Returns:
             Dictionary with bandwidth results
         """
-        await self._socket.send(f"CALC:MARK{marker_number}:FUNC:BWID:STAT ON")
-        await self._socket.send(f"CALC:MARK{marker_number}:FUNC:BWID:NDB {n_db}")
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:FUNC:BWID:STAT ON", idempotency=Idempotency.SETTING
+        )
+        await self._socket.send(
+            f"CALC:MARK{marker_number}:FUNC:BWID:NDB {n_db}", idempotency=Idempotency.SETTING
+        )
         bw_resp = await self._socket.query(f"CALC:MARK{marker_number}:FUNC:BWID:RES?")
 
         # Response is typically: bandwidth,center_freq,quality_factor
@@ -560,15 +624,17 @@ class RSSpectrumAnalyzerDriver:
 
     async def single_sweep(self, timeout: float | None = None) -> None:
         """Trigger single sweep and wait for completion."""
-        await self._socket.send("INIT:CONT OFF")
-        await self._socket.send("INIT:IMM")
+        # `INIT:CONT OFF` assigns the continuous-sweep flag; `INIT:IMM` arms an
+        # acquisition. Only the second one is a state transition.
+        await self._socket.send("INIT:CONT OFF", idempotency=Idempotency.SETTING)
+        await self._socket.send("INIT:IMM", idempotency=Idempotency.ACTION)
         await self._socket.wait_opc(timeout)
         logger.debug("Single sweep complete")
 
     async def continuous_sweep(self, enabled: bool = True) -> None:
         """Enable or disable continuous sweep."""
         state = "ON" if enabled else "OFF"
-        await self._socket.send(f"INIT:CONT {state}")
+        await self._socket.send(f"INIT:CONT {state}", idempotency=Idempotency.SETTING)
         logger.debug(f"Continuous sweep {'enabled' if enabled else 'disabled'}")
 
     async def set_trigger(self, source: str = "IMM", level: float | None = None) -> None:
@@ -580,9 +646,9 @@ class RSSpectrumAnalyzerDriver:
             level: Trigger level (for video/IF power triggers)
         """
         source = sanitize_scpi_param(source)
-        await self._socket.send(f"TRIG:SOUR {source}")
+        await self._socket.send(f"TRIG:SOUR {source}", idempotency=Idempotency.SETTING)
         if level is not None and source in ("VID", "IFP"):
-            await self._socket.send(f"TRIG:LEV {level}")
+            await self._socket.send(f"TRIG:LEV {level}", idempotency=Idempotency.SETTING)
         logger.debug(f"Trigger set to {source}")
 
     # =========================================================================
@@ -607,12 +673,16 @@ class RSSpectrumAnalyzerDriver:
         self._validator.validate_frequency(center_hz)
 
         # Configure channel power measurement
-        await self._socket.send("CALC:MARK:FUNC:POW:SEL CPOW")
-        await self._socket.send(f"SENS:FREQ:CENT {center_hz}")
-        await self._socket.send(f"SENS:POW:ACH:BWID:CHAN1 {bandwidth_hz}")
+        await self._socket.send("CALC:MARK:FUNC:POW:SEL CPOW", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:FREQ:CENT {center_hz}", idempotency=Idempotency.SETTING)
+        await self._socket.send(
+            f"SENS:POW:ACH:BWID:CHAN1 {bandwidth_hz}", idempotency=Idempotency.SETTING
+        )
 
         # Set appropriate span (at least 2x bandwidth)
-        await self._socket.send(f"SENS:FREQ:SPAN {bandwidth_hz * 3}")
+        await self._socket.send(
+            f"SENS:FREQ:SPAN {bandwidth_hz * 3}", idempotency=Idempotency.SETTING
+        )
 
         # Trigger measurement
         await self.single_sweep()
@@ -658,15 +728,23 @@ class RSSpectrumAnalyzerDriver:
         adj_offset = adjacent_offset_hz or channel_bw_hz
 
         # Configure ACLR measurement
-        await self._socket.send("CALC:MARK:FUNC:POW:SEL ACP")
-        await self._socket.send(f"SENS:FREQ:CENT {center_hz}")
-        await self._socket.send(f"SENS:POW:ACH:BWID:CHAN1 {channel_bw_hz}")
-        await self._socket.send(f"SENS:POW:ACH:BWID:ACH {adj_bw}")
-        await self._socket.send(f"SENS:POW:ACH:SPAC {adj_offset}")
+        await self._socket.send("CALC:MARK:FUNC:POW:SEL ACP", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:FREQ:CENT {center_hz}", idempotency=Idempotency.SETTING)
+        await self._socket.send(
+            f"SENS:POW:ACH:BWID:CHAN1 {channel_bw_hz}", idempotency=Idempotency.SETTING
+        )
+        await self._socket.send(
+            f"SENS:POW:ACH:BWID:ACH {adj_bw}", idempotency=Idempotency.SETTING
+        )
+        await self._socket.send(
+            f"SENS:POW:ACH:SPAC {adj_offset}", idempotency=Idempotency.SETTING
+        )
 
         # Set span to cover all channels
         total_span = adj_offset * 2 + channel_bw_hz * 2
-        await self._socket.send(f"SENS:FREQ:SPAN {total_span}")
+        await self._socket.send(
+            f"SENS:FREQ:SPAN {total_span}", idempotency=Idempotency.SETTING
+        )
 
         # Trigger measurement
         await self.single_sweep()
@@ -702,8 +780,10 @@ class RSSpectrumAnalyzerDriver:
             OBWResult with occupied bandwidth
         """
         # Configure OBW measurement
-        await self._socket.send("CALC:MARK:FUNC:POW:SEL OBW")
-        await self._socket.send(f"SENS:POW:ACH:BWID:PCT {power_percentage}")
+        await self._socket.send("CALC:MARK:FUNC:POW:SEL OBW", idempotency=Idempotency.SETTING)
+        await self._socket.send(
+            f"SENS:POW:ACH:BWID:PCT {power_percentage}", idempotency=Idempotency.SETTING
+        )
 
         # Trigger measurement
         await self.single_sweep()
@@ -729,7 +809,7 @@ class RSSpectrumAnalyzerDriver:
             SEMResult with pass/fail and violations
         """
         # Activate SEM measurement
-        await self._socket.send("CALC:MARK:FUNC:POW:SEL ESP")
+        await self._socket.send("CALC:MARK:FUNC:POW:SEL ESP", idempotency=Idempotency.SETTING)
 
         # Trigger measurement
         await self.single_sweep()
