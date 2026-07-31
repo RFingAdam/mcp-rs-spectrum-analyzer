@@ -67,9 +67,7 @@ def sanitize_scpi_param(value: str) -> str:
         return check_scpi_param(value)
     except ScpiParamError as e:
         if e.rule is ScpiParamRule.NOT_A_STRING:
-            raise ValueError(
-                f"SCPI parameter must be a string, got {e.type_name}"
-            ) from None
+            raise ValueError(f"SCPI parameter must be a string, got {e.type_name}") from None
         if e.rule is ScpiParamRule.DANGEROUS_CHARACTER:
             raise ValueError(
                 f"SCPI injection rejected: dangerous character {e.character!r} "
@@ -113,8 +111,7 @@ def validate_safe_path(user_path: str | Path, base_dir: str | Path) -> Path:
                 f"{e.resolved} which is outside {e.base}"
             ) from None
         raise ValueError(
-            f"Symlink escape denied: {e.link} points to "
-            f"{e.target} which is outside {e.base}"
+            f"Symlink escape denied: {e.link} points to {e.target} which is outside {e.base}"
         ) from None
 
 

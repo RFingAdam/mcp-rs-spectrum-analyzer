@@ -275,9 +275,7 @@ class RSSpectrumAnalyzerDriver:
         # A query by syntax, an action by effect: a retry restarts a
         # multi-minute alignment rather than re-reading a value, so it must not
         # inherit query()'s retryable default.
-        resp = await self._socket.query(
-            "CAL:ALL?", timeout=120.0, idempotency=Idempotency.ACTION
-        )
+        resp = await self._socket.query("CAL:ALL?", timeout=120.0, idempotency=Idempotency.ACTION)
         return resp
 
     # =========================================================================
@@ -312,9 +310,7 @@ class RSSpectrumAnalyzerDriver:
 
     async def set_frequency_step(self, step_hz: float) -> None:
         """Set frequency step for manual tuning."""
-        await self._socket.send(
-            f"SENS:FREQ:CENT:STEP {step_hz}", idempotency=Idempotency.SETTING
-        )
+        await self._socket.send(f"SENS:FREQ:CENT:STEP {step_hz}", idempotency=Idempotency.SETTING)
 
     async def full_span(self) -> None:
         """Set full span."""
@@ -348,9 +344,7 @@ class RSSpectrumAnalyzerDriver:
     async def set_reference_level(self, level_dbm: float) -> None:
         """Set reference level."""
         self._validator.validate_reference_level(level_dbm)
-        await self._socket.send(
-            f"DISP:TRAC:Y:RLEV {level_dbm}", idempotency=Idempotency.SETTING
-        )
+        await self._socket.send(f"DISP:TRAC:Y:RLEV {level_dbm}", idempotency=Idempotency.SETTING)
         logger.debug(f"Reference level set to {level_dbm} dBm")
 
     async def get_reference_level(self) -> float:
@@ -384,9 +378,7 @@ class RSSpectrumAnalyzerDriver:
         """Set Y-axis scale in dB/division."""
         if db_per_div <= 0:
             raise ConfigurationError("Scale must be positive")
-        await self._socket.send(
-            f"DISP:TRAC:Y:PDIV {db_per_div}", idempotency=Idempotency.SETTING
-        )
+        await self._socket.send(f"DISP:TRAC:Y:PDIV {db_per_div}", idempotency=Idempotency.SETTING)
         logger.debug(f"Scale set to {db_per_div} dB/div")
 
     # =========================================================================
@@ -506,9 +498,7 @@ class RSSpectrumAnalyzerDriver:
             await self._socket.send("SENS:AVER:STAT OFF", idempotency=Idempotency.SETTING)
         else:
             await self._socket.send("SENS:AVER:STAT ON", idempotency=Idempotency.SETTING)
-            await self._socket.send(
-                f"SENS:AVER:COUN {count}", idempotency=Idempotency.SETTING
-            )
+            await self._socket.send(f"SENS:AVER:COUN {count}", idempotency=Idempotency.SETTING)
         logger.debug(f"Averaging count set to {count}")
 
     async def clear_trace(self, trace_number: int = 1) -> None:
@@ -551,9 +541,7 @@ class RSSpectrumAnalyzerDriver:
         )
         # A search, not an assignment: it repositions the marker rather than
         # storing a value, so it is never re-sent after a transport failure.
-        await self._socket.send(
-            f"CALC:MARK{marker_number}:MAX", idempotency=Idempotency.ACTION
-        )
+        await self._socket.send(f"CALC:MARK{marker_number}:MAX", idempotency=Idempotency.ACTION)
         return await self.get_marker(marker_number)
 
     async def next_peak(self, marker_number: int = 1, direction: str = "next") -> MarkerData:
@@ -733,18 +721,12 @@ class RSSpectrumAnalyzerDriver:
         await self._socket.send(
             f"SENS:POW:ACH:BWID:CHAN1 {channel_bw_hz}", idempotency=Idempotency.SETTING
         )
-        await self._socket.send(
-            f"SENS:POW:ACH:BWID:ACH {adj_bw}", idempotency=Idempotency.SETTING
-        )
-        await self._socket.send(
-            f"SENS:POW:ACH:SPAC {adj_offset}", idempotency=Idempotency.SETTING
-        )
+        await self._socket.send(f"SENS:POW:ACH:BWID:ACH {adj_bw}", idempotency=Idempotency.SETTING)
+        await self._socket.send(f"SENS:POW:ACH:SPAC {adj_offset}", idempotency=Idempotency.SETTING)
 
         # Set span to cover all channels
         total_span = adj_offset * 2 + channel_bw_hz * 2
-        await self._socket.send(
-            f"SENS:FREQ:SPAN {total_span}", idempotency=Idempotency.SETTING
-        )
+        await self._socket.send(f"SENS:FREQ:SPAN {total_span}", idempotency=Idempotency.SETTING)
 
         # Trigger measurement
         await self.single_sweep()

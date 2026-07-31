@@ -459,17 +459,13 @@ class StateManager:
         # Restore markers
         for marker in state.markers:
             if marker.enabled and marker.frequency_hz is not None:
-                await sa.scpi_send(
-                    f"CALC:MARK{marker.marker_number}:STAT ON", idempotency=setting
-                )
+                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT ON", idempotency=setting)
                 await sa.scpi_send(
                     f"CALC:MARK{marker.marker_number}:X {marker.frequency_hz}",
                     idempotency=setting,
                 )
             else:
-                await sa.scpi_send(
-                    f"CALC:MARK{marker.marker_number}:STAT OFF", idempotency=setting
-                )
+                await sa.scpi_send(f"CALC:MARK{marker.marker_number}:STAT OFF", idempotency=setting)
 
     def list_saved_states(self) -> list[dict[str, Any]]:
         """List all saved state files."""
