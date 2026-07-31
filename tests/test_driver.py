@@ -198,9 +198,7 @@ class TestRSSpectrumAnalyzerDriver:
         driver = self._make_driver(mock_socket)
         driver._state = ConnectionState.CONNECTED
         await driver.set_preamp(True)
-        mock_socket.send.assert_called_with(
-            "INP:GAIN:STAT ON", idempotency=Idempotency.SETTING
-        )
+        mock_socket.send.assert_called_with("INP:GAIN:STAT ON", idempotency=Idempotency.SETTING)
 
     @pytest.mark.asyncio
     async def test_single_sweep(self):
