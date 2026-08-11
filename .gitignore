@@ -127,3 +127,11 @@ Thumbs.db
 
 # State files
 sa_states/
+
+# CAD/design files
+*.kicad_pcb
+*.brd
+*.step
+*.stp
+*.zip
+.ip-denylist
