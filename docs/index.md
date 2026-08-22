@@ -1,7 +1,7 @@
 # mcp-rs-spectrum-analyzer
 
 **Drive Rohde & Schwarz spectrum and signal analyzers from any MCP-compatible AI client.**
-**TCP or VISA — 62 tools spanning frequency, bandwidth, markers, measurements, traces, limits, and templates.**
+**TCP or VISA: 62 tools spanning frequency, bandwidth, markers, measurements, traces, limits, and templates.**
 
 ---
 
@@ -73,13 +73,13 @@ It answers commands; it does not measure anything.
 
 ## Where to next
 
-- [Tool reference](tools.md) — every MCP tool with arguments
-- [Usage examples](usage.md) — an EMC pre-compliance walkthrough
-- [Architecture](architecture.md) — how this MCP fits inside eng-mcp-suite
+- [Tool reference](tools.md). Every MCP tool with arguments
+- [Usage examples](usage.md). An EMC pre-compliance walkthrough
+- [Architecture](architecture.md): how this MCP fits inside eng-mcp-suite
 
 ---
 
 !!! note "Part of eng-mcp-suite"
-    This MCP server is part of [eng-mcp-suite](https://github.com/RFingAdam/eng-mcp-suite) —
+    This MCP server is part of [eng-mcp-suite](https://github.com/RFingAdam/eng-mcp-suite),
     an umbrella of engineering MCP servers across RF, EMC, PCB, signal
     integrity, EM simulation, and lab test.

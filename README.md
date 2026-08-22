@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo-banner.svg" alt="mcp-rs-spectrum-analyzer — Rohde & Schwarz spectrum analyzer control (FSW / FSVA / FSV / FPL)" width="100%"/>
+<img src="assets/logo-banner.svg" alt="mcp-rs-spectrum-analyzer: Rohde & Schwarz spectrum analyzer control (FSW / FSVA / FSV / FPL)" width="100%"/>
 
 <br/>
 
@@ -11,7 +11,7 @@
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-member-22D3EE.svg)](https://github.com/RFingAdam/eng-mcp-suite)
 
 **Drive Rohde & Schwarz spectrum and signal analyzers from any MCP-compatible AI client.**
-**TCP or VISA — 62 tools spanning frequency, bandwidth, markers, measurements (ACLR / OBW / SEM / EVM / CCDF), traces, limits, and templates.**
+**TCP or VISA: 62 tools spanning frequency, bandwidth, markers, measurements (ACLR / OBW / SEM / EVM / CCDF), traces, limits, and templates.**
 
 [Quick start](#quick-start) ·
 [Tools](#tools) ·
@@ -27,7 +27,7 @@
 > spectrum analyzers over SCPI (TCP or VISA). You need actual R&S **FSW / FSVA /
 > FSV / FPL** hardware (or a supported Keysight / Rigol / Siglent analyzer) on
 > the network or USB-connected to measure anything. For development and offline
-> work there is now a simulator — `spectrum-simulator` serves a SCPI command
+> work there is now a simulator: `spectrum-simulator` serves a SCPI command
 > table on port 5025 so the tools can be exercised with no bench attached. It
 > produces synthetic values: anything measured against it is measuring nothing.
 
@@ -55,7 +55,7 @@ Siglent (SSA3000X/SVA1000X), Anritsu (MS2760/MS2090), and Tektronix
   (no VISA install needed) or PyVISA for GPIB / USB-TMC / HiSLIP, both from
   [`scpi-core`](https://github.com/RFingAdam/scpi-core). The socket transport
   holds each query's send and read under one lock and refuses a stream a
-  timed-out read may have left offset — the failure mode that otherwise returns
+  timed-out read may have left offset. The failure mode that otherwise returns
   the *previous* answer with no error.
 - 🧪 **Offline simulator.** `spectrum-simulator` plus fault injection
   (`--drop-responses`, `--slow-response-ms`, `--close-after`) so timeout and
@@ -229,16 +229,16 @@ Built-in templates: `channel_power`, `aclr`, `obw`, `emi` (CISPR 32 Class B),
 
 ## Security
 
-- **SCPI injection protection** — all user-supplied parameters sanitized
+- **SCPI injection protection**. All user-supplied parameters sanitized
   before inclusion in SCPI commands.
-- **Path-traversal protection** — file-export paths validated against
+- **Path-traversal protection**: file-export paths validated against
   configured safe directories.
-- **Raw SCPI guard** — `sa_scpi_send` / `sa_scpi_query` can be disabled via
+- **Raw SCPI guard**: `sa_scpi_send` / `sa_scpi_query` can be disabled via
   `SA_RAW_SCPI_ENABLED=false`.
-- **Serialized shared state** — measurement, template and state each hold their
+- **Serialized shared state**: measurement, template and state each hold their
   own asyncio lock; live analyzer connections are held by a shared connection
   registry with an idle TTL and a single eviction path.
-- **State rollback** — failed state restore operations automatically roll
+- **State rollback**: failed state restore operations automatically roll
   back to the previous state.
 
 ---
@@ -248,10 +248,10 @@ Built-in templates: `channel_power`, `aclr`, `obw`, `emi` (CISPR 32 Class B),
 `mcp-rs-spectrum-analyzer` fits in the following [eng-mcp-suite](https://github.com/RFingAdam/eng-mcp-suite)
 workflow bundles:
 
-- **`lab-automation`** — pair with `copper-mountain-vna-mcp`, `mcp-rs-siggen`,
+- **`lab-automation`**: pair with `copper-mountain-vna-mcp`, `mcp-rs-siggen`,
   and `mcp-rs-cmw500` for end-to-end RF bench-test workflows driven from a
   single agent session.
-- **`emc-precompliance`** — drive ACLR / OBW / SEM measurements while
+- **`emc-precompliance`**: drive ACLR / OBW / SEM measurements while
   `mcp-emc-regulations` supplies CISPR / FCC limits.
 
 ```bash
@@ -262,10 +262,10 @@ eng-mcp-suite install --workflow lab-automation
 
 ## Documentation
 
-- 📘 **[Quick Start](docs/index.md)** — install through first call.
-- 🛠️ **[Tool reference](docs/tools.md)** — every MCP tool, every argument.
-- 📐 **[Usage examples](docs/usage.md)** — an EMC pre-compliance walkthrough.
-- 🏗️ **[Architecture](docs/architecture.md)** — how this MCP fits in eng-mcp-suite.
+- 📘 **[Quick Start](docs/index.md)**: install through first call.
+- 🛠️ **[Tool reference](docs/tools.md)**. Every MCP tool, every argument.
+- 📐 **[Usage examples](docs/usage.md)**. An EMC pre-compliance walkthrough.
+- 🏗️ **[Architecture](docs/architecture.md)**: how this MCP fits in eng-mcp-suite.
 - 📝 **[Changelog](CHANGELOG.md)**
 
 ---
@@ -276,7 +276,7 @@ eng-mcp-suite install --workflow lab-automation
 
 [![eng-mcp-suite](https://img.shields.io/badge/eng--mcp--suite-engineering%20MCP%20catalog-22D3EE?style=for-the-badge)](https://github.com/RFingAdam/eng-mcp-suite)
 
-<sub>Part of [eng-mcp-suite](https://github.com/RFingAdam/eng-mcp-suite) — an open
+<sub>Part of [eng-mcp-suite](https://github.com/RFingAdam/eng-mcp-suite). An open
 umbrella of MCP servers for RF / EMC / PCB / signal-integrity engineering. Drop
 into the `lab-automation` workflow bundle with
 `eng-mcp-suite install --workflow lab-automation`.</sub>
@@ -311,22 +311,22 @@ align with the eng-mcp-suite toolkit-wide AGPL move.
 
 ## Commercial licensing
 
-This project is licensed under AGPL-3.0-or-later. A commercial license —
-for embedding in a closed-source product, hosting as a paid service
-without AGPL's share-back obligations, or proprietary redistribution —
+This project is licensed under AGPL-3.0-or-later. A commercial license
+(for embedding in a closed-source product, hosting as a paid service
+without AGPL's share-back obligations, or proprietary redistribution)
 is available on a case-by-case basis. See [eng-mcp-suite's licensing
 policy](https://github.com/RFingAdam/eng-mcp-suite/blob/main/LICENSE_SUMMARY.md#commercial-licensing)
 or open an issue and tag `@RFingAdam`.
 
 ## Acknowledgments
 
-- **Rohde & Schwarz** — for thorough SCPI documentation of the FSW / FSVA /
+- **Rohde & Schwarz**: for thorough SCPI documentation of the FSW / FSVA /
   FSV / FPL families.
-- **The MCP working group** — for the [Model Context Protocol](https://modelcontextprotocol.io)
+- **The MCP working group**: for the [Model Context Protocol](https://modelcontextprotocol.io)
   specification.
 
 <div align="center">
 
-<sub>Part of <a href="https://github.com/RFingAdam/eng-mcp-suite">eng-mcp-suite</a> — built for RF engineers, PCB designers, EMC labs, and AI agents.</sub>
+<sub>Part of <a href="https://github.com/RFingAdam/eng-mcp-suite">eng-mcp-suite</a>: built for RF engineers, PCB designers, EMC labs, and AI agents.</sub>
 
 </div>

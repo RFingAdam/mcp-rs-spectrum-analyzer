@@ -38,18 +38,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `visa` extra defers to `scpi-core[visa]` instead of pinning pyvisa itself.
 
 ### Added
-- **`spectrum-simulator`** — an offline SCPI simulator, which this server
+- **`spectrum-simulator`**. An offline SCPI simulator, which this server
   previously lacked entirely. Serves `sim/nodes/spectrum.yaml` through
   `scpi_core.sim`, with fault injection (`--drop-responses`,
   `--slow-response-ms`, `--close-after`, `--strict-unknown`) so timeout and
   desync handling can be exercised without hardware. Nodes transcribed from
   documentation but unconfirmed on hardware are listed by
   `spectrum-simulator --list-unverified`.
-- `RSSpectrumAnalyzerDriver.resync_count`, so repeated stream resyncs — the sign
-  that command timeouts are tighter than the sweep times in use — are visible
+- `RSSpectrumAnalyzerDriver.resync_count`, so repeated stream resyncs. The sign
+  that command timeouts are tighter than the sweep times in use: are visible
   rather than dying with the connection.
 
-## [0.3.0] — 2026-05-13
+## [0.3.0]: 2026-05-13
 
 ### Changed
 - **License: Apache-2.0 → AGPL-3.0-or-later.** Aligns with the
@@ -59,10 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [LICENSE_SUMMARY](https://github.com/RFingAdam/eng-mcp-suite/blob/main/LICENSE_SUMMARY.md)
   for the toolkit-wide rationale.
 
-## [0.2.0] — 2026-05-13
+## [0.2.0]: 2026-05-13
 
 ### Added
-- Multi-vendor support beyond R&S — Keysight, Rigol, Siglent SCPI cores.
+- Multi-vendor support beyond R&S: Keysight, Rigol, Siglent SCPI cores.
 - Brand assets aligned with eng-mcp-suite design system.
 - Prominent "Hardware required" notice in README.
 

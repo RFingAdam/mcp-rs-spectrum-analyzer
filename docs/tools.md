@@ -148,5 +148,5 @@ Built-in templates: `channel_power`, `aclr`, `obw`, `emi` (CISPR 32 Class B),
 Tool definitions live in
 [`src/spectrum_analyzer_mcp/tools/`](../src/spectrum_analyzer_mcp/tools/),
 one module per category. Each tool has a complete JSON-Schema `inputSchema`
-declared at registration — arguments, defaults, and units are documented
+declared at registration: arguments, defaults, and units are documented
 inline there.

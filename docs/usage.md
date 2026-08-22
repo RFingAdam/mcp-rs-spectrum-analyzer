@@ -37,7 +37,7 @@ export SA_PORT=5025
 
 Restart your MCP client.
 
-## Step 1 — connect
+## Step 1: connect
 
 > *"Connect to the SA and tell me what it is."*
 
@@ -52,7 +52,7 @@ The agent calls `sa_connect`, then `sa_identify`:
 }
 ```
 
-## Step 2 — configure the measurement
+## Step 2: configure the measurement
 
 > *"Center 5.2 GHz, span 100 MHz, RBW 100 kHz, ref level 0 dBm. Use the CISPR 32 Class B EMI template."*
 
@@ -69,7 +69,7 @@ sa_apply_template()
 The EMI template flips the detector to quasi-peak and pulls in the
 CISPR 32 Class B limit line.
 
-## Step 3 — single sweep + ACLR
+## Step 3: single sweep + ACLR
 
 > *"Take one sweep, then run ACLR."*
 
@@ -90,7 +90,7 @@ Returns:
 }
 ```
 
-## Step 4 — check the limit line
+## Step 4. Check the limit line
 
 > *"Did the trace clear the CISPR 32 Class B mask?"*
 
@@ -102,7 +102,7 @@ sa_check_limits()
 { "passed": true, "violations": [] }
 ```
 
-## Step 5 — export
+## Step 5: export
 
 > *"Save the trace as JSON for the report and grab a screenshot."*
 

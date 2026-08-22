@@ -1,5 +1,5 @@
 site_name: mcp-rs-spectrum-analyzer
-site_description: R&S spectrum analyzer control (FSW / FSVA / FSV / FPL) — MCP server with 62 tools
+site_description: R&S spectrum analyzer control (FSW / FSVA / FSV / FPL): MCP server with 62 tools
 site_url: https://rfingadam.github.io/mcp-rs-spectrum-analyzer/
 repo_url: https://github.com/RFingAdam/mcp-rs-spectrum-analyzer
 repo_name: RFingAdam/mcp-rs-spectrum-analyzer

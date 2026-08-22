@@ -12,25 +12,25 @@
 └──────────────────────────────────────────────────────────────────┘
                               │
 ┌──────────────────────────────────────────────────────────────────┐
-│  Orchestration — tools/ (62 tools, 14 categories)                │
+│  Orchestration: tools/ (62 tools, 14 categories)                │
 │  • connection · frequency · amplitude · bandwidth                │
 │  • trace · markers · measurements · sweep                        │
 │  • export · scpi · templates · limits · state · system           │
 └──────────────────────────────────────────────────────────────────┘
                               │
 ┌──────────────────────────────────────────────────────────────────┐
-│  Transport abstraction — shared, from scpi-core                  │
-│  • scpi_core.SCPISocket       — raw async TCP, desync-aware      │
-│  • scpi_core.VISATransport    — PyVISA (GPIB/USB-TMC/HiSLIP)     │
-│  • scpi_core.create_transport — auto-detect from params           │
-│  • transport/__init__.py      — re-export shim over the above    │
+│  Transport abstraction: shared, from scpi-core                  │
+│  • scpi_core.SCPISocket      : raw async TCP, desync-aware      │
+│  • scpi_core.VISATransport   : PyVISA (GPIB/USB-TMC/HiSLIP)     │
+│  • scpi_core.create_transport: auto-detect from params           │
+│  • transport/__init__.py     : re-export shim over the above    │
 └──────────────────────────────────────────────────────────────────┘
                               │
 ┌──────────────────────────────────────────────────────────────────┐
 │  Driver                                                          │
-│  • driver/sa_driver.py        — core SCPI driver                 │
-│  • driver/scpi_dialect.py     — vendor-specific variations       │
-│  • driver/factory.py          — auto-detect vendor from *IDN?    │
+│  • driver/sa_driver.py       : core SCPI driver                 │
+│  • driver/scpi_dialect.py    : vendor-specific variations       │
+│  • driver/factory.py         : auto-detect vendor from *IDN?    │
 └──────────────────────────────────────────────────────────────────┘
                               │
                        SCPI to instrument
@@ -76,7 +76,7 @@ spectrum_analyzer_mcp/
 
 ## Position in eng-mcp-suite
 
-`mcp-rs-spectrum-analyzer` sits in the **lab-gear** layer — it talks to
+`mcp-rs-spectrum-analyzer` sits in the **lab-gear** layer. It talks to
 physical analyzers over SCPI.
 
 ```
@@ -98,15 +98,15 @@ physical analyzers over SCPI.
 
 ### Feeds (this MCP produces output that)…
 
-- **mcp-emc-regulations** — measured ACLR / OBW / SEM / harmonics traces feed
+- **mcp-emc-regulations**: measured ACLR / OBW / SEM / harmonics traces feed
   into CISPR / FCC limit cross-references.
-- **mcp-pcb-emcopilot** — radiated emissions context for PCB-layout review.
+- **mcp-pcb-emcopilot**: radiated emissions context for PCB-layout review.
 
 ### Consumes (this MCP accepts input from)…
 
-- **mcp-rs-siggen** — coordinated stimulus during EVM / spectrum-flatness
+- **mcp-rs-siggen**: coordinated stimulus during EVM / spectrum-flatness
   testing.
-- **mcp-emc-regulations** — limit-line definitions for standards-aware
+- **mcp-emc-regulations**: limit-line definitions for standards-aware
   pass/fail checks.
 
 ### Workflow bundles that include this MCP
@@ -129,10 +129,10 @@ physical analyzers over SCPI.
   transaction and refuses to use a stream it cannot prove is clean.
 - **Every SCPI call site declares its idempotency.** `Idempotency.SETTING` marks
   writes a transport may safely re-send after a failure; `ACTION` marks the ones
-  it must not, such as `*RST` and `CALC:MARK1:MAX:NEXT` — that second one steps
+  it must not, such as `*RST` and `CALC:MARK1:MAX:NEXT`. That second one steps
   to a *different* peak on every arrival.
 - **One asyncio lock per resource class.** Measurement, template and state each
-  get their own lock — fine-grained enough to let independent tools run
+  get their own lock: fine-grained enough to let independent tools run
   concurrently, coarse enough to keep SCPI framing intact. Connections are the
   exception: the shared registry owns their serialization.
 - **Offline mode is a node map, not a mock.** `spectrum-simulator` serves
